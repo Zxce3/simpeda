@@ -138,8 +138,7 @@ function getDetailedServerStats(): array
 }
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] == 'get_stats') {
     header("Content-Type: application/json");
-    $updated_stats = getDetailedServerStats();
-    echo json_encode($updated_stats);
+    echo json_encode(getDetailedServerStats());
     exit();
 }
 function formatUptime($uptime_seconds)
@@ -175,7 +174,6 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_stats') {
     echo json_encode($updated_stats);
     exit();
 }
-$server_stats = getDetailedServerStats();
 ?>
 <!DOCTYPE html>
 <html lang="en">
