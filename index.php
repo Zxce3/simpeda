@@ -169,11 +169,6 @@ function formatBytes($bytes)
     $bytes /= (1 << (10 * $pow));
     return round($bytes, 2) . ' ' . $units[$pow];
 }
-if (isset($_GET['action']) && $_GET['action'] == 'get_stats') {
-    $updated_stats = getDetailedServerStats();
-    echo json_encode($updated_stats);
-    exit();
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
