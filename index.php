@@ -1,5 +1,5 @@
 <?php
-function getDetailedServerStats()
+function getCPUUsage()
 {
     $cpu_info = file('/proc/stat');
     $cpu_usage = 'N/A';
@@ -13,11 +13,20 @@ function getDetailedServerStats()
             }
         }
     }
+    return $cpu_usage;
+}
+
+function getMemoryUsage()
+{
     $memory_info = file_get_contents('/proc/meminfo');
     preg_match_all('/(\w+):\s+(\d+)/', $memory_info, $matches);
     $memory_data = array_combine($matches[1], $matches[2]);
     $memory_usage_gb = round(($memory_data['MemTotal'] - $memory_data['MemAvailable']) / (1024 * 1024), 2);
     $memory_total_gb = round($memory_data['MemTotal'] / (1024 * 1024), 2);
+    return $memory_usage_gb . ' GB / ' . $memory_total_gb . ' GB';
+}
+function getDiskUsage()
+{
     $disk_stats = file('/proc/diskstats', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     $disk_info = [];
 
@@ -41,13 +50,15 @@ function getDetailedServerStats()
         $disk_usage[] = "Disk: $disk_name - Read Sectors: {$info['Read Sectors']}, Write Sectors: {$info['Write Sectors']}, Size (bytes): {$info['Size (bytes)']}";
     }
 
-    
     $disk_usage_string = implode("\n", $disk_usage);
-    
-    
+
+    return $disk_usage_string;
+}
+
+function getDiskSpace()
+{
     $disk_space_info = [
         '/' => ['Total' => disk_total_space('/'), 'Free' => disk_free_space('/')],
-        
     ];
 
     $disk_space_str = '';
@@ -57,9 +68,19 @@ function getDetailedServerStats()
         $disk_space_str .= "$mount_point $free_gb GB / $total_gb GB\n";
     }
 
+    return $disk_space_str;
+}
+
+function getUptime()
+{
     $uptime = file_get_contents('/proc/uptime');
     $uptime_parts = explode(' ', $uptime);
     $uptime_seconds = (int) $uptime_parts[0];
+    return formatUptime($uptime_seconds);
+}
+
+function getNetworkInterfaces()
+{
     if (file_exists('/proc/net/dev')) {
         $network_interfaces = file('/proc/net/dev', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $network_data = array();
@@ -79,21 +100,44 @@ function getDetailedServerStats()
                 );
             }
         }
+        return $network_data;
     } else {
-        $network_data = 'N/A';
+        return 'N/A';
     }
-    $process_count = (int) shell_exec('ps aux | wc -l') - 1;
-    return array(
-        'CPU Usage' => $cpu_usage,
-        'Memory Usage' => $memory_usage_gb . ' GB / ' . $memory_total_gb . ' GB',
-        'Disk Usage' => $disk_usage_string,
-        'Disk Space' => $disk_space_str,
-        'Uptime' => formatUptime($uptime_seconds),
-        'Network Interfaces' => $network_data,
-        'Process Count' => $process_count
-    );
+}
+
+function getProcessCount()
+{
+    $proc_dir = '/proc';
+    $process_count = 0;
+
+    if ($handle = opendir($proc_dir)) {
+        while (false !== ($entry = readdir($handle))) {
+            if (is_numeric($entry)) {
+                $process_count++;
+            }
+        }
+        closedir($handle);
+    }
+
+    return $process_count;
+}
+
+function getDetailedServerStats(): array
+{
+    return [
+        'CPU Usage'          => getCPUUsage(),
+        'Memory Usage'       => getMemoryUsage(),
+        'Disk Usage'         => getDiskUsage(),
+        'Disk Space'         => getDiskSpace(),
+        'Uptime'             => getUptime(),
+        'Network Interfaces' => getNetworkInterfaces(),
+        'Process Count'      => getProcessCount()
+
+    ];
 }
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] == 'get_stats') {
+    header("Content-Type: application/json");
     $updated_stats = getDetailedServerStats();
     echo json_encode($updated_stats);
     exit();
@@ -140,6 +184,7 @@ $server_stats = getDetailedServerStats();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Dashboard</title>
+    <link rel="shortcut icon" href="https://github.com/zxce3.png" type="image/x-icon" />
     <script>
         function updateStats() {
             var xhttp = new XMLHttpRequest();
