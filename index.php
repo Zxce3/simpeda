@@ -162,10 +162,10 @@ function getDetailedServerStats(): array
 {
     return [
         'CPU Info'          => getCPUInfo(),
-        'Memory Usage'       => getMemoryUsage(),
-        'Disk Space'         => getDiskSpace(),
-        'Uptime'             => getUptime(),
         'Network Interfaces' => getNetworkInterfaces(),
+        'Disk Space'         => getDiskSpace(),
+        'Memory Usage'       => getMemoryUsage(),
+        'Uptime'             => getUptime(),
         'Process Count'      => getProcessCount()
     ];
 }
