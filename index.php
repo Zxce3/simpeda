@@ -206,6 +206,7 @@ function formatBytes($bytes, $precision = 2)
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -225,6 +226,7 @@ function formatBytes($bytes, $precision = 2)
             card.appendChild(cardContent);
             return card;
         }
+
         function createList(data) {
             var list = document.createElement('ul');
             for (var key in data) {
@@ -234,12 +236,14 @@ function formatBytes($bytes, $precision = 2)
             }
             return list;
         }
+
         function createDiskSpaceContent() {
             var diskSpaceInfo = `<?php echo getDiskSpace(); ?>`;
             var content = document.createElement('p');
             content.innerHTML = diskSpaceInfo.replace(/\n/g, '<br/><hr/>');
             return content;
         }
+
         function createContent(metric, data) {
             var content;
             if (metric === 'Network Interfaces' && typeof data === 'object') {
@@ -283,6 +287,7 @@ function formatBytes($bytes, $precision = 2)
             }
             return content;
         }
+
         function updateStats() {
             var xhttp = new XMLHttpRequest();
             xhttp.onreadystatechange = function() {
@@ -303,6 +308,7 @@ function formatBytes($bytes, $precision = 2)
         updateStats();
     </script>
 </head>
+
 <body>
     <script>
         function updateTime() {
@@ -328,9 +334,11 @@ function formatBytes($bytes, $precision = 2)
             background-color: #212B38;
             color: limegreen;
         }
+
         hr {
             border: 1px solid limegreen;
         }
+
         .btn {
             font-size: medium;
             background: #181818;
@@ -341,41 +349,50 @@ function formatBytes($bytes, $precision = 2)
             border-radius: 5px;
             cursor: pointer;
         }
+
         .container {
             max-width: 1200px;
             margin: auto;
             padding: 15px;
         }
+
         .row {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             grid-gap: 15px;
             grid-auto-rows: minmax(100px, auto);
         }
+
         .card {
             border: 3px solid green;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
+
         .card:hover {
             border: 5px solid limegreen;
             border-radius: 0;
         }
+
         .card-title {
             font-size: 1.25rem;
             font-weight: bold;
             margin-bottom: 10px;
         }
+
         .card-content {
             padding: 15px;
         }
+
         .card-content ul {
             list-style-type: none;
             padding: 0;
         }
+
         .card-content ul li {
             margin-bottom: 8px;
         }
+
         .card-content button {
             font-size: 1rem;
             font-weight: bold;
@@ -387,13 +404,16 @@ function formatBytes($bytes, $precision = 2)
             cursor: pointer;
             outline: none;
         }
+
         .card-content button i {
             margin-left: 5px;
         }
+
         .collapse-content {
             padding-left: 20px;
             display: none;
         }
     </style>
 </body>
+
 </html>
