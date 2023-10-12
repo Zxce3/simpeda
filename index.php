@@ -1,21 +1,55 @@
 <?php
+function getCPUInfo()
+{
+    $cpu_info = file('/proc/cpuinfo');
+    $cpu_model_name = '';
+    $cpu_cores = 0;
+    $cpu_clock_speed = '';
+    foreach ($cpu_info as $line) {
+        $line_parts = explode(':', $line);
+        if (count($line_parts) == 2) {
+            $key = trim($line_parts[0]);
+            $value = trim($line_parts[1]);
+            if ($key == 'model name') {
+                $cpu_model_name = $value;
+            } else if ($key == 'cpu cores') {
+                $cpu_cores = intval($value);
+            } else if ($key == 'cpu MHz') {
+                $cpu_clock_speed = $value . ' MHz';
+            }
+        }
+    }
+    return [
+        'Model Name' => $cpu_model_name,
+        'Cores' => $cpu_cores,
+        'Clock Speed' => $cpu_clock_speed,
+    ];
+}
 function getCPUUsage()
 {
-    $cpu_info = file('/proc/stat');
-    $cpu_usage = 'N/A';
-    if (!empty($cpu_info[0])) {
-        preg_match_all('/\d+/', $cpu_info[0], $matches);
-        $cpu_parts = array_map('intval', $matches[0]);
-        if (count($cpu_parts) >= 10) {
-            $total_cpu = array_sum($cpu_parts);
-            if (isset($cpu_parts[3]) && is_numeric($cpu_parts[3]) && isset($total_cpu) && is_numeric($total_cpu) && $total_cpu != 0) {
-                $cpu_usage = round(100 * ($total_cpu - $cpu_parts[3]) / $total_cpu, 2) . '%';
-            }
+    $cpu_usage = [];
+    $cpu_stat = file('/proc/stat');
+    foreach ($cpu_stat as $line) {
+        $line_parts = preg_split('/\s+/', $line);
+        if (count($line_parts) > 4 && substr($line_parts[0], 0, 3) == 'cpu') {
+            $cpu_name = $line_parts[0];
+            $user = intval($line_parts[1]);
+            $nice = intval($line_parts[2]);
+            $system = intval($line_parts[3]);
+            $idle = intval($line_parts[4]);
+            $iowait = intval($line_parts[5]);
+            $irq = intval($line_parts[6]);
+            $softirq = intval($line_parts[7]);
+            $steal = intval($line_parts[8]);
+            $guest = intval($line_parts[9]);
+            $guest_nice = intval($line_parts[10]);
+            $total = $user + $nice + $system + $idle + $iowait + $irq + $softirq + $steal + $guest + $guest_nice;
+            $usage = 100 - ($idle * 100 / $total);
+            $cpu_usage[$cpu_name] = formatBytes($usage) . '%';
         }
     }
     return $cpu_usage;
 }
-
 function getMemoryUsage()
 {
     $memory_info = file_get_contents('/proc/meminfo');
@@ -29,7 +63,6 @@ function getDiskUsage()
 {
     $disk_stats = file('/proc/diskstats', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     $disk_info = [];
-
     foreach ($disk_stats as $line) {
         $parts = preg_split('/\s+/', $line);
         if (count($parts) >= 14 && $parts[2] !== 'ram' && $parts[2] !== 'loop') {
@@ -45,32 +78,39 @@ function getDiskUsage()
         }
     }
     $disk_usage = [];
-
     foreach ($disk_info as $disk_name => $info) {
         $disk_usage[] = "Disk: $disk_name - Read Sectors: {$info['Read Sectors']}, Write Sectors: {$info['Write Sectors']}, Size (bytes): {$info['Size (bytes)']}";
     }
-
     $disk_usage_string = implode("\n", $disk_usage);
-
     return $disk_usage_string;
 }
-
 function getDiskSpace()
 {
-    $disk_space_info = [
-        '/' => ['Total' => disk_total_space('/'), 'Free' => disk_free_space('/')],
-    ];
-
-    $disk_space_str = '';
-    foreach ($disk_space_info as $mount_point => $space) {
-        $total_gb = round($space['Total'] / (1024 * 1024 * 1024), 2);
-        $free_gb = round($space['Free'] / (1024 * 1024 * 1024), 2);
-        $disk_space_str .= "$mount_point $free_gb GB / $total_gb GB\n";
+    $df_output = shell_exec('df -B 1G');
+    $df_lines = explode("\n", $df_output);
+    $disk_space = [];
+    foreach ($df_lines as $line) {
+        $line = preg_replace('/\s+/', ' ', $line);
+        $line_parts = explode(' ', $line);
+        if (count($line_parts) == 6 && $line_parts[0] != 'Filesystem') {
+            $mount_point = $line_parts[5];
+            $disk_space[$mount_point] = [
+                'total' => $line_parts[1] * 1024 * 1024 * 1024,
+                'used' => $line_parts[2] * 1024 * 1024 * 1024,
+                'free' => $line_parts[3] * 1024 * 1024 * 1024,
+            ];
+        }
     }
-
-    return $disk_space_str;
+    $disk_space_info_str = '';
+    foreach ($disk_space as $mount_point => $space) {
+        $total_gb = round($space['total'] / (1024 * 1024 * 1024), 2);
+        $free_gb = round($space['free'] / (1024 * 1024 * 1024), 2);
+        $used_gb = round($space['used'] / (1024 * 1024 * 1024), 2);
+        $used_percent = round($space['used'] / $space['total'] * 100, 2);
+        $disk_space_info_str .= "$mount_point $free_gb GB / $total_gb GB ($used_percent%)\n";
+    }
+    return $disk_space_info_str;
 }
-
 function getUptime()
 {
     $uptime = file_get_contents('/proc/uptime');
@@ -78,7 +118,6 @@ function getUptime()
     $uptime_seconds = (int) $uptime_parts[0];
     return formatUptime($uptime_seconds);
 }
-
 function getNetworkInterfaces()
 {
     if (file_exists('/proc/net/dev')) {
@@ -89,11 +128,11 @@ function getNetworkInterfaces()
                 list($iface, $data) = explode(':', $line, 2);
                 $data = preg_split('/\s+/', trim($data));
                 $network_data[$iface] = array(
-                    'RX Bytes' => formatBytes($data[0]),
+                    'RX Bytes' => $data[0] . ' (' . formatBytes($data[0]) . ')',
                     'RX Packets' => $data[1],
                     'RX Errors' => $data[2],
                     'RX Dropped' => $data[3],
-                    'TX Bytes' => formatBytes($data[8]),
+                    'TX Bytes' => $data[8] . ' (' . formatBytes($data[8]) . ')',
                     'TX Packets' => $data[9],
                     'TX Errors' => $data[10],
                     'TX Dropped' => $data[11]
@@ -105,12 +144,10 @@ function getNetworkInterfaces()
         return 'N/A';
     }
 }
-
 function getProcessCount()
 {
     $proc_dir = '/proc';
     $process_count = 0;
-
     if ($handle = opendir($proc_dir)) {
         while (false !== ($entry = readdir($handle))) {
             if (is_numeric($entry)) {
@@ -119,21 +156,17 @@ function getProcessCount()
         }
         closedir($handle);
     }
-
     return $process_count;
 }
-
 function getDetailedServerStats(): array
 {
     return [
-        'CPU Usage'          => getCPUUsage(),
+        'CPU Info'          => getCPUInfo(),
         'Memory Usage'       => getMemoryUsage(),
-        'Disk Usage'         => getDiskUsage(),
         'Disk Space'         => getDiskSpace(),
         'Uptime'             => getUptime(),
         'Network Interfaces' => getNetworkInterfaces(),
         'Process Count'      => getProcessCount()
-
     ];
 }
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] == 'get_stats') {
@@ -160,25 +193,96 @@ function formatUptime($uptime_seconds)
     $uptime .= "$seconds seconds";
     return rtrim($uptime, ', ');
 }
-function formatBytes($bytes)
+function formatBytes($bytes, $precision = 2)
 {
-    $units = array('B', 'KB', 'MB', 'GB', 'TB');
+    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
     $bytes = max($bytes, 0);
-    $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+    $pow = floor(($bytes ? log(abs($bytes)) : 0) / log(1024));
     $pow = min($pow, count($units) - 1);
-    $bytes /= (1 << (10 * $pow));
-    return round($bytes, 2) . ' ' . $units[$pow];
+    $bytes /= (1 << (10 * abs($pow)));
+    $bytes = round($bytes, $precision);
+    return ($bytes < 0 ? '-' : '') . abs($bytes) . ' ' . $units[$pow];
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Dashboard</title>
     <link rel="shortcut icon" href="https://github.com/zxce3.png" type="image/x-icon" />
     <script>
+        function createCard(title, content) {
+            var card = document.createElement('div');
+            card.className = 'card';
+            var cardContent = document.createElement('div');
+            cardContent.className = 'card-content';
+            var titleElement = document.createElement('h2');
+            titleElement.className = 'card-title';
+            titleElement.textContent = title;
+            cardContent.appendChild(titleElement);
+            cardContent.appendChild(content);
+            card.appendChild(cardContent);
+            return card;
+        }
+        function createList(data) {
+            var list = document.createElement('ul');
+            for (var key in data) {
+                var listItem = document.createElement('li');
+                listItem.textContent = key + ': ' + data[key];
+                list.appendChild(listItem);
+            }
+            return list;
+        }
+        function createDiskSpaceContent() {
+            var diskSpaceInfo = `<?php echo getDiskSpace(); ?>`;
+            var content = document.createElement('p');
+            content.innerHTML = diskSpaceInfo.replace(/\n/g, '<br/><hr/>');
+            return content;
+        }
+        function createContent(metric, data) {
+            var content;
+            if (metric === 'Network Interfaces' && typeof data === 'object') {
+                content = document.createElement('ul');
+                for (var iface in data) {
+                    var ifaceItem = document.createElement('li');
+                    var ifaceButton = document.createElement('button');
+                    ifaceButton.type = 'button';
+                    ifaceButton.textContent = '<' + iface + '>';
+                    ifaceButton.className = 'collapse-button';
+                    ifaceButton.dataset.target = 'collapse-' + iface;
+                    var ul = document.createElement('ul');
+                    ul.id = 'collapse-' + iface;
+                    ul.className = 'collapse-content';
+                    for (var key in data[iface]) {
+                        var subListItem = document.createElement('li');
+                        subListItem.textContent = key + ': ' + data[iface][key];
+                        ul.appendChild(subListItem);
+                    }
+                    ifaceButton.addEventListener('click', function() {
+                        var target = document.getElementById(this.dataset.target);
+                        if (target.style.display === 'block') {
+                            target.style.display = 'none';
+                        } else {
+                            target.style.display = 'block';
+                        }
+                    });
+                    ifaceItem.appendChild(ifaceButton);
+                    ifaceItem.appendChild(ul);
+                    content.appendChild(ifaceItem);
+                }
+            } else if (typeof data === 'object') {
+                content = createList(data);
+            } else {
+                if (metric === 'Disk Space') {
+                    content = createDiskSpaceContent();
+                } else {
+                    content = document.createElement('p');
+                    content.textContent = data;
+                }
+            }
+            return content;
+        }
         function updateStats() {
             var xhttp = new XMLHttpRequest();
             xhttp.onreadystatechange = function() {
@@ -187,57 +291,8 @@ function formatBytes($bytes)
                     var container = document.getElementById('stats-container');
                     container.innerHTML = '';
                     for (var metric in stats) {
-                        var card = document.createElement('div');
-                        card.className = 'card';
-                        var cardContent = document.createElement('div');
-                        cardContent.className = 'card-content';
-                        var title = document.createElement('h2');
-                        title.className = 'card-title';
-                        title.textContent = metric;
-                        var content;
-                        if (metric === 'Network Interfaces' && typeof(stats[metric]) === 'object') {
-                            content = document.createElement('ul');
-                            for (var iface in stats[metric]) {
-                                var ifaceItem = document.createElement('li');
-                                var ifaceButton = document.createElement('button');
-                                ifaceButton.type = 'button';
-                                ifaceButton.textContent = '<' + iface + '>';
-                                ifaceButton.className = 'collapse-button';
-                                ifaceButton.dataset.target = 'collapse-' + iface;
-                                var ul = document.createElement('ul');
-                                ul.id = 'collapse-' + iface;
-                                ul.className = 'collapse-content';
-                                for (var key in stats[metric][iface]) {
-                                    var subListItem = document.createElement('li');
-                                    subListItem.textContent = key + ': ' + stats[metric][iface][key];
-                                    ul.appendChild(subListItem);
-                                }
-                                ifaceButton.addEventListener('click', function() {
-                                    var target = document.getElementById(this.dataset.target);
-                                    if (target.style.display === 'block') {
-                                        target.style.display = 'none';
-                                    } else {
-                                        target.style.display = 'block';
-                                    }
-                                });
-                                ifaceItem.appendChild(ifaceButton);
-                                ifaceItem.appendChild(ul);
-                                content.appendChild(ifaceItem);
-                            }
-                        } else if (typeof(stats[metric]) === 'object') {
-                            content = document.createElement('ul');
-                            for (var key in stats[metric]) {
-                                var listItem = document.createElement('li');
-                                listItem.textContent = key + ': ' + stats[metric][key];
-                                content.appendChild(listItem);
-                            }
-                        } else {
-                            content = document.createElement('p');
-                            content.textContent = stats[metric];
-                        }
-                        cardContent.appendChild(title);
-                        cardContent.appendChild(content);
-                        card.appendChild(cardContent);
+                        var content = createContent(metric, stats[metric]);
+                        var card = createCard(metric, content);
                         container.appendChild(card);
                     }
                 }
@@ -248,7 +303,6 @@ function formatBytes($bytes)
         updateStats();
     </script>
 </head>
-
 <body>
     <script>
         function updateTime() {
@@ -274,7 +328,9 @@ function formatBytes($bytes)
             background-color: #212B38;
             color: limegreen;
         }
-
+        hr {
+            border: 1px solid limegreen;
+        }
         .btn {
             font-size: medium;
             background: #181818;
@@ -285,49 +341,41 @@ function formatBytes($bytes)
             border-radius: 5px;
             cursor: pointer;
         }
-
         .container {
             max-width: 1200px;
             margin: auto;
             padding: 15px;
         }
-
         .row {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             grid-gap: 15px;
+            grid-auto-rows: minmax(100px, auto);
         }
-
         .card {
             border: 3px solid green;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-
         .card:hover {
             border: 5px solid limegreen;
             border-radius: 0;
         }
-
         .card-title {
             font-size: 1.25rem;
             font-weight: bold;
             margin-bottom: 10px;
         }
-
         .card-content {
             padding: 15px;
         }
-
         .card-content ul {
             list-style-type: none;
             padding: 0;
         }
-
         .card-content ul li {
             margin-bottom: 8px;
         }
-
         .card-content button {
             font-size: 1rem;
             font-weight: bold;
@@ -339,16 +387,13 @@ function formatBytes($bytes)
             cursor: pointer;
             outline: none;
         }
-
         .card-content button i {
             margin-left: 5px;
         }
-
         .collapse-content {
             padding-left: 20px;
             display: none;
         }
     </style>
 </body>
-
 </html>
