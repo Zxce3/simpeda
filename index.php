@@ -37,9 +37,9 @@ function getLoadAverage()
 {
     $load_avg = sys_getloadavg();
     return [
-        '1 Minute' => $load_avg[0],
-        '5 Minutes' => $load_avg[1],
-        '15 Minutes' => $load_avg[2]
+        '1 min' => sprintf("%.2f", $load_avg[0]),
+        '5 min' => sprintf("%.2f", $load_avg[1]),
+        '15 min' => sprintf("%.2f", $load_avg[2])
     ];
 }
 function getBasicServerInfo()
@@ -59,12 +59,13 @@ function getBasicServerInfo()
 }
 function getCPUUsage()
 {
-    $cpu_usage = [];
     $cpu_stat = file('/proc/stat');
+    $total_active_cores = 0;
+    $total_usage = 0;
+
     foreach ($cpu_stat as $line) {
         $line_parts = preg_split('/\s+/', $line);
         if (count($line_parts) > 4 && substr($line_parts[0], 0, 3) == 'cpu') {
-            $cpu_name = $line_parts[0];
             $user = intval($line_parts[1]);
             $nice = intval($line_parts[2]);
             $system = intval($line_parts[3]);
@@ -77,22 +78,20 @@ function getCPUUsage()
             $guest_nice = intval($line_parts[10]);
             $total = $user + $nice + $system + $idle + $iowait + $irq + $softirq + $steal + $guest + $guest_nice;
             $usage = 100 - ($idle * 100 / $total);
-            $cpu_usage[$cpu_name] = [
-                'Usage' => round($usage, 2) . '%',
-                'User' => $user,
-                'Nice' => $nice,
-                'System' => $system,
-                'Idle' => $idle,
-                'I/O Wait' => $iowait,
-                'IRQ' => $irq,
-                'SoftIRQ' => $softirq,
-                'Steal' => $steal,
-                'Guest' => $guest,
-                'Guest Nice' => $guest_nice,
-            ];
+
+            if ($line_parts[0] !== 'cpu') {
+                $total_active_cores++;
+                $total_usage += $usage;
+            }
         }
     }
-    return $cpu_usage;
+
+    $total_cpu_usage = [
+        'Active cores' => "$total_active_cores/" . ($total_active_cores), // Total cores / Total threads
+        'CPU usage' => round($total_usage / $total_active_cores, 2) . '%' // Average usage across active cores
+    ];
+
+    return $total_cpu_usage;
 }
 function getMemoryUsage()
 {
@@ -101,8 +100,17 @@ function getMemoryUsage()
     $memory_data = array_combine($matches[1], $matches[2]);
     $memory_usage_gb = round(($memory_data['MemTotal'] - $memory_data['MemAvailable']) / (1024 * 1024), 2);
     $memory_total_gb = round($memory_data['MemTotal'] / (1024 * 1024), 2);
-    return $memory_usage_gb . ' GB / ' . $memory_total_gb . ' GB';
+
+    $memory_usage_percent = round(($memory_usage_gb / $memory_total_gb) * 100, 2) . '%';
+
+    $memory_usage = [
+        "size" => "$memory_usage_gb GB / $memory_total_gb GB",
+        "percent" => $memory_usage_percent
+    ];
+
+    return $memory_usage;
 }
+
 function getDiskUsage()
 {
     $disk_stats = file('/proc/diskstats', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -251,25 +259,7 @@ function formatBytes($bytes, $precision = 2)
     $bytes = round($bytes, $precision);
     return ($bytes < 0 ? '-' : '') . abs($bytes) . ' ' . $units[$pow];
 }
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    if ($_POST['action'] === 'change_theme' && isset($_POST['theme'])) {
-        $theme = $_POST['theme'];
-        $themes = [
-            'dark',
-            'minimalist',
-            'ocean-blue',
-            'classic-gray',
-            'high-contrast',
-            'retro-vibes'
-        ];
-        if (in_array($theme, $themes)) {
-            echo json_encode(['success' => true]);
-        } else {
-            echo json_encode(['success' => false, 'error' => 'Invalid theme']);
-        }
-        exit();
-    }
-}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -313,7 +303,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         function createContent(metric, data) {
             var content;
-            if (metric === 'Network Interfaces' || metric === 'CPU Usage' && typeof data === 'object') {
+            if (metric === 'Network Interfaces' && typeof data === 'object') {
                 content = document.createElement('ul');
                 for (var iface in data) {
                     var ifaceItem = document.createElement('li');
@@ -388,21 +378,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         function changeTheme(theme) {
             var selectedTheme = theme;
-            var xhttp = new XMLHttpRequest();
-            xhttp.onreadystatechange = function() {
-                if (this.readyState == 4 && this.status == 200) {
-                    var response = JSON.parse(this.responseText);
-                    if (response.success) {
-                        document.body.className = 'theme-' + selectedTheme;
-                        localStorage.setItem('selected-theme', selectedTheme);
-                    } else {
-                        alert('Error changing theme: ' + response.error);
-                    }
-                }
-            };
-            xhttp.open("POST", "", true);
-            xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-            xhttp.send("action=change_theme&theme=" + selectedTheme);
+            document.body.className = 'theme-' + selectedTheme;
+            localStorage.setItem('selected-theme', selectedTheme);
         }
 
         function toggleThemeDropdown() {
