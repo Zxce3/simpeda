@@ -1,4 +1,19 @@
 <?php
+
+/**
+ * This file contains functions to retrieve system information and display it in a single file server dashboard.
+ * The functions include generating a safe ID, parsing lines, getting CPU info, load average, basic server info,
+ * CPU usage, memory usage, disk usage, and disk space.
+ *
+ * @author Zxce3
+ * @version 1.0
+ */
+
+function generateSafeId($text)
+{
+    $safeId = preg_replace('/[^a-zA-Z0-9]/', '-', $text);
+    return strtolower($safeId);
+}
 function parseLine($line)
 {
     $line_parts = explode(':', $line);
@@ -87,8 +102,8 @@ function getCPUUsage()
     }
 
     $total_cpu_usage = [
-        'Active cores' => "$total_active_cores/" . ($total_active_cores), // Total cores / Total threads
-        'CPU usage' => round($total_usage / $total_active_cores, 2) . '%' // Average usage across active cores
+        'Active cores' => "$total_active_cores/" . ($total_active_cores),
+        'CPU usage' => round($total_usage / $total_active_cores, 2) . '%'
     ];
 
     return $total_cpu_usage;
@@ -144,32 +159,47 @@ function getDiskSpace()
     foreach ($df_lines as $line) {
         $line = preg_replace('/\s+/', ' ', $line);
         $line_parts = explode(' ', $line);
-        if (count($line_parts) == 6 && $line_parts[0] != 'Filesystem') {
+        if (count($line_parts) == 6 && $line_parts[0] != 'Filesystem' && strpos($line_parts[0], 'efivarfs') === false && strpos($line_parts[0], 'tmpfs') === false) {
             $mount_point = $line_parts[5];
             $disk_space[$mount_point] = [
+                'mount' => $line_parts[0],
                 'total' => $line_parts[1] * 1024 * 1024 * 1024,
                 'used' => $line_parts[2] * 1024 * 1024 * 1024,
                 'free' => $line_parts[3] * 1024 * 1024 * 1024,
             ];
         }
     }
-    $disk_space_info_str = '';
+    $disk_space_info = [];
     foreach ($disk_space as $mount_point => $space) {
         $total_gb = round($space['total'] / (1024 * 1024 * 1024), 2);
         $free_gb = round($space['free'] / (1024 * 1024 * 1024), 2);
         $used_gb = round($space['used'] / (1024 * 1024 * 1024), 2);
         $used_percent = round($space['used'] / $space['total'] * 100, 2);
-        $disk_space_info_str .= "$mount_point $free_gb GB / $total_gb GB ($used_percent%)\n";
+        $mount = $space['mount'];
+        $disk_space_info[$mount_point] = [
+            "Mount Point" => $mount,
+            "total" => "$total_gb GB",
+            "used" => "$used_gb GB",
+            "free" => "$free_gb GB",
+            "used_percent" => "$used_percent%"
+        ];
     }
-    return $disk_space_info_str;
+    return $disk_space_info;
 }
 function getUptime()
 {
     $uptime = file_get_contents('/proc/uptime');
     $uptime_parts = explode(' ', $uptime);
     $uptime_seconds = (int) $uptime_parts[0];
-    return formatUptime($uptime_seconds);
+
+    $days = floor($uptime_seconds / (60 * 60 * 24));
+    $hours = floor(($uptime_seconds % (60 * 60 * 24)) / (60 * 60));
+    $minutes = floor(($uptime_seconds % (60 * 60)) / 60);
+    $seconds = $uptime_seconds % 60;
+
+    return "$days days, $hours hours, $minutes minutes, $seconds seconds";
 }
+
 function getNetworkInterfaces()
 {
     if (file_exists('/proc/net/dev')) {
@@ -221,7 +251,7 @@ function getDetailedServerStats(): array
         'Disk Space'         => getDiskSpace(),
         'Memory Usage'       => getMemoryUsage(),
         'Load Avarage'       => getLoadAverage(),
-        'Uptime'             => getUptime(),
+        'Uptime data'             => getUptime(),
         'Process Count'      => getProcessCount()
     ];
 }
@@ -259,6 +289,7 @@ function formatBytes($bytes, $precision = 2)
     $bytes = round($bytes, $precision);
     return ($bytes < 0 ? '-' : '') . abs($bytes) . ' ' . $units[$pow];
 }
+$server_stats = getDetailedServerStats();
 
 ?>
 <!DOCTYPE html>
@@ -269,101 +300,6 @@ function formatBytes($bytes, $precision = 2)
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server <?php echo gethostname(); ?></title>
     <link rel="shortcut icon" href="https://github.com/zxce3.png" type="image/x-icon" />
-    <script>
-        function createCard(title, content) {
-            var card = document.createElement('div');
-            card.className = 'card';
-            var cardContent = document.createElement('div');
-            cardContent.className = 'card-content';
-            var titleElement = document.createElement('h2');
-            titleElement.className = 'card-title';
-            titleElement.textContent = title;
-            cardContent.appendChild(titleElement);
-            cardContent.appendChild(content);
-            card.appendChild(cardContent);
-            return card;
-        }
-
-        function createList(data) {
-            var list = document.createElement('ul');
-            for (var key in data) {
-                var listItem = document.createElement('li');
-                listItem.textContent = key + ': ' + data[key];
-                list.appendChild(listItem);
-            }
-            return list;
-        }
-
-        function createDiskSpaceContent() {
-            var diskSpaceInfo = `<?php echo getDiskSpace(); ?>`;
-            var content = document.createElement('p');
-            content.innerHTML = diskSpaceInfo.replace(/\n/g, '<br/><hr/>');
-            return content;
-        }
-
-        function createContent(metric, data) {
-            var content;
-            if (metric === 'Network Interfaces' && typeof data === 'object') {
-                content = document.createElement('ul');
-                for (var iface in data) {
-                    var ifaceItem = document.createElement('li');
-                    var ifaceButton = document.createElement('button');
-                    ifaceButton.type = 'button';
-                    ifaceButton.textContent = '<' + iface + '>';
-                    ifaceButton.className = 'collapse-button btn';
-                    ifaceButton.dataset.target = 'collapse-' + iface;
-                    var ul = document.createElement('ul');
-                    ul.id = 'collapse-' + iface;
-                    ul.className = 'collapse-content';
-                    for (var key in data[iface]) {
-                        var subListItem = document.createElement('li');
-                        subListItem.textContent = key + ': ' + data[iface][key];
-                        ul.appendChild(subListItem);
-                    }
-                    ifaceButton.addEventListener('click', function() {
-                        var target = document.getElementById(this.dataset.target);
-                        if (target.style.display === 'block') {
-                            target.style.display = 'none';
-                        } else {
-                            target.style.display = 'block';
-                        }
-                    });
-                    ifaceItem.appendChild(ifaceButton);
-                    ifaceItem.appendChild(ul);
-                    content.appendChild(ifaceItem);
-                }
-            } else if (typeof data === 'object') {
-                content = createList(data);
-            } else {
-                if (metric === 'Disk Space') {
-                    content = createDiskSpaceContent();
-                } else {
-                    content = document.createElement('p');
-                    content.textContent = data;
-                }
-            }
-            return content;
-        }
-
-        function updateStats() {
-            var xhttp = new XMLHttpRequest();
-            xhttp.onreadystatechange = function() {
-                if (this.readyState == 4 && this.status == 200) {
-                    var stats = JSON.parse(this.responseText);
-                    var container = document.getElementById('stats-container');
-                    container.innerHTML = '';
-                    for (var metric in stats) {
-                        var content = createContent(metric, stats[metric]);
-                        var card = createCard(metric, content);
-                        container.appendChild(card);
-                    }
-                }
-            };
-            xhttp.open("GET", "?action=get_stats&timestamp=" + new Date().getTime(), true);
-            xhttp.send();
-        }
-        updateStats();
-    </script>
 </head>
 
 <body class="theme-dark">
@@ -422,27 +358,154 @@ function formatBytes($bytes, $precision = 2)
                 }
             }
         });
+        document.addEventListener('click', function(event) {
+            var clickedElement = event.target;
+            if (clickedElement.classList.contains('collapse-button')) {
+                var targetId = clickedElement.dataset.target;
+                var targetElement = document.getElementById(targetId);
+                if (window.getComputedStyle(targetElement).display === 'none') {
+                    targetElement.style.display = 'block';
+                } else {
+                    targetElement.style.display = 'none';
+                }
+            }
+        });
+
         setInterval(updateTime, 1000);
     </script>
     <div class="container">
-        <h1>Server Dashboard
-            <button class="btn" onclick="updateStats()">Update View</button>
-            <span id="current-time"></span>
-        </h1>
-        <div class="theme-dropdown">
-            <button class="theme-button btn" onclick="toggleThemeDropdown()">Theme</button>
-            <div id="theme-selector" class="theme-select">
-                <div class="theme-option" data-theme="dark">Dark Mode</div>
-                <div class="theme-option" data-theme="minimalist">Minimalist</div>
-                <div class="theme-option" data-theme="ocean-blue">Ocean Blue</div>
-                <div class="theme-option" data-theme="classic-gray">Classic Gray</div>
-                <div class="theme-option" data-theme="high-contrast">High Contrast</div>
-                <div class="theme-option" data-theme="retro-vibes">Retro Vibes</div>
+        <div class="header">
+            <h1>Server Dashboard
+                <span id="current-time"></span>
+            </h1>
+            <div class="theme-dropdown">
+                <button class="theme-button btn" onclick="toggleThemeDropdown()">Theme</button>
+                <div id="theme-selector" class="theme-select">
+                    <div class="theme-option" data-theme="dark">Dark Mode</div>
+                    <div class="theme-option" data-theme="minimalist">Minimalist</div>
+                    <div class="theme-option" data-theme="ocean-blue">Ocean Blue</div>
+                    <div class="theme-option" data-theme="classic-gray">Classic Gray</div>
+                    <div class="theme-option" data-theme="high-contrast">High Contrast</div>
+                    <div class="theme-option" data-theme="retro-vibes">Retro Vibes</div>
+                </div>
             </div>
         </div>
-        <div id="stats-container" class="row"></div>
+        <div class="row">
+            <?php foreach ($server_stats as $metric => $value) : ?>
+                <div class="card card-<?php echo generateSafeId($metric); ?>" id="card-<?php echo generateSafeId($metric); ?>">
+                    <div class="card-content">
+                        <h2 class="card-title"><?php echo $metric; ?></h2>
+                        <?php if (is_array($value)) : ?>
+                            <ul>
+                                <?php foreach ($value as $subMetric => $subValue) : ?>
+                                    <?php if (is_array($subValue)) : ?>
+                                        <li id="<?php echo generateSafeId($metric . '-' . $subMetric); ?>">
+                                            <button type="button" class="collapse-button btn" data-target="collapse-<?php echo generateSafeId($subMetric); ?>">
+                                                &lt;<?php echo $subMetric; ?>&gt;
+                                            </button>
+                                            <ul id="collapse-<?php echo generateSafeId($subMetric); ?>" class="collapse-content">
+                                                <?php foreach ($subValue as $key => $subItem) : ?>
+                                                    <li id="<?php echo generateSafeId($metric . '-' . $key); ?>"><?php echo $key . ': ' . $subItem; ?></li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </li>
+                                    <?php else : ?>
+                                        <li id="<?php echo generateSafeId($metric . '-' . $subMetric); ?>"><?php echo $subMetric . ': ' . $subValue; ?></li>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php else : ?>
+                            <p id="<?php echo generateSafeId($metric . '-' . $value); ?>"><?php echo $value; ?></p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
     </div>
     <style>
+        body {
+            font-family: monospace, sans-serif, Arial, Helvetica, Ubuntu;
+            margin: 20px;
+        }
+
+        hr {
+            border: 1px solid limegreen;
+        }
+
+        .btn {
+            font-size: medium;
+            border-radius: 5px;
+            padding: 5px;
+            margin: 1px;
+            color: inherit;
+            cursor: pointer;
+            background: none !important;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 15px;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            grid-gap: 15px;
+            grid-auto-rows: minmax(100px, auto);
+        }
+
+        .card {
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .card-content {
+            padding: 15px;
+        }
+
+        .card-content ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .card-content ul li {
+            margin-bottom: 8px;
+        }
+
+        .card-content button {
+            font-size: 1rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 0;
+            border: none !important;
+            background: none !important;
+            cursor: pointer;
+            outline: none !important;
+        }
+
+        .card-content button i {
+            margin-left: 5px;
+        }
+
+        .collapse-content {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding-left: 20px !important;
+            display: none;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         .theme-dropdown {
             position: relative;
             display: inline-block;
@@ -462,12 +525,11 @@ function formatBytes($bytes, $precision = 2)
 
         .theme-select {
             display: none;
-            position: absolute;
+            position: relative;
             background-color: #fff;
             min-width: 160px;
             font-size: medium;
             border-radius: 5px;
-            padding: 5px;
             margin: 1px;
             color: initial;
             cursor: pointer;
@@ -606,83 +668,6 @@ function formatBytes($bytes, $precision = 2)
         .theme-retro-vibes .card {
             border: 3px solid #ffffff;
             border-radius: 8px;
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-
-        hr {
-            border: 1px solid limegreen;
-        }
-
-        .btn {
-            font-size: medium;
-            border-radius: 5px;
-            padding: 5px;
-            margin: 1px;
-            color: inherit;
-            cursor: pointer;
-            background: none !important;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: auto;
-            padding: 15px;
-        }
-
-        .row {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            grid-gap: 15px;
-            grid-auto-rows: minmax(100px, auto);
-        }
-
-        .card {
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .card-content {
-            padding: 15px;
-        }
-
-        .card-content ul {
-            list-style-type: none;
-            padding: 0;
-        }
-
-        .card-content ul li {
-            margin-bottom: 8px;
-        }
-
-        .card-content button {
-            font-size: 1rem;
-            font-weight: bold;
-            text-align: center;
-            padding: 0;
-            border: none !important;
-            background: none !important;
-            cursor: pointer;
-            outline: none !important;
-        }
-
-        .card-content button i {
-            margin-left: 5px;
-        }
-
-        .collapse-content {
-            background-color: rgba(0, 0, 0, 0.2);
-            padding-left: 20px !important;
-            display: none;
         }
     </style>
 </body>
