@@ -6,7 +6,7 @@
  * CPU usage, memory usage, disk usage, and disk space.
  *
  * @author Zxce3
- * @version 1.0
+ * @version 1.1
  */
 
 function generateSafeId($text)
@@ -299,7 +299,7 @@ $server_stats = getDetailedServerStats();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server <?php echo gethostname(); ?></title>
-    <link rel="shortcut icon" href="https://github.com/zxce3.png" type="image/x-icon" />
+    <link rel="shortcut icon" href="https://picsum.photos/300/300" type="image/x-icon" />
 </head>
 
 <body class="theme-dark">
