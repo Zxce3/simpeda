@@ -32,13 +32,13 @@ You can toggle between light and dark themes using the "Toggle Theme" button. Th
 
 - `index.php`: Main file containing the PHP code to retrieve system information and the HTML/CSS/JavaScript for the dashboard.
 - `README.md`: Documentation file.
+- `build/`: Directory containing build-related files.
+  - `index.php`: Build version of the main file.
+  - `build.md`: Build documentation.
+  - `build.php`: Build script.
+- `src/`: Directory containing source files.
+  - `api.php`: PHP file for API endpoints.
+  - `footer.php`: PHP file for the footer section.
+  - `header.php`: PHP file for the header section.
+  - `SystemInformation.php`: PHP file with functions to retrieve system information.
 
-## How to Run
-
-1. Place the `index.php` file on your server.
-2. Access the file via your web browser.
-3. The dashboard will display the system information and update automatically.
-
-## Example
-
-To see the dashboard in action, open your web browser and navigate to the URL where `index.php` is hosted.
