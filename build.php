@@ -72,15 +72,15 @@ class Builder
 
     private function minifyPHP(string $content): string
     {
+        // Preserve strings
         $strings = [];
         $content = preg_replace_callback('/([\'"])((?:\\\\.|(?!\1).)*)\1/s', function ($matches) use (&$strings) {
             $placeholder = '___STRING_' . count($strings) . '___';
             $strings[$placeholder] = $matches[0];
             return $placeholder;
         }, $content);
-
+    
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-
         $lines = explode("\n", $content);
         $result = [];
         foreach ($lines as $line) {
@@ -90,14 +90,16 @@ class Builder
             }
         }
         $content = implode("\n", $result);
-
         $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{}(),])\s*/', '$1', $content);
-
+        $content = preg_replace('/\s*([;{},()])\s*/', '$1', $content);
+        $content = preg_replace('/<\?php\s*/', '<?php ', $content);
+        $content = preg_replace('/([^}])}/', '$1 }', $content);
+        
+        // Restore strings
         foreach ($strings as $placeholder => $string) {
             $content = str_replace($placeholder, $string, $content);
         }
-
+    
         return trim($content);
     }
 
@@ -183,7 +185,7 @@ class Builder
 
         $output = preg_replace('/\?>\s*<\?php/', '', $output);
         if (strpos($output, '?>') === false) {
-            $output = rtrim($output) . " ?>";
+            $output = rtrim($output);
         }
 
         $output = preg_replace('/\?>\s*\/\*/', '?> /*', $output);
@@ -237,10 +239,13 @@ class Builder
 }
 
 $sourceFiles = [
-    'src/SystemInformation.php',
     'src/api.php',
-    'src/header.php',
-    'src/footer.php'
+    'src/dashboard.php',
+    'src/SystemInformation.php',
+    'src/install.php',
+    'src/home.php',
+    'src/css_style.php',
+    'src/js_script.php'
 ];
 $outputFile = 'build/index.php';
 
