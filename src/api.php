@@ -21,11 +21,26 @@ if (isset($_GET['api'])) {
     exit;
 }
 
+function isPocketbaseRunning() {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "http://127.0.0.1:8090/api/health");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $http_code === 200;
+}
+
 if (file_exists('pocketbase/pb_data')) {
-    if (isset($_GET['dashboard'])) {
-        displayDashboard();
+    if (isPocketbaseRunning()) {
+        if (isset($_GET['dashboard'])) {
+            displayDashboard();
+        } else {
+            displayHome();
+        }
     } else {
-        displayHome();
+        echo "Pocketbase is not running.";
     }
 } else {
     displayInstall();
@@ -60,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec("rm pocketbase_{$version}_{$os}_{$arch}.zip");
         $output = [];
         exec("pocketbase/pocketbase superuser create $email $password", $output);
+        exec("nohup pocketbase/pocketbase serve > pocketbase.log 2>&1 &");
         echo "Pocketbase installed and user created successfully.";
         header('Location: dashboard.php');
         exit;
