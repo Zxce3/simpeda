@@ -23,7 +23,8 @@ class SystemInformation
 
     public static function getCPUInfo()
     {
-        if (!file_exists('/proc/cpuinfo') || !file_exists('/proc/stat')) return ['CPU Info' => 'Not available'];
+        if (!file_exists('/proc/cpuinfo') || !file_exists('/proc/stat'))
+            return ['CPU Info' => 'Not available'];
         $cpu_info = file_get_contents('/proc/cpuinfo');
         preg_match('/model name\s+:\s+(.+)$/m', $cpu_info, $model);
         preg_match_all('/^processor\s+:\s+\d+$/m', $cpu_info, $cores);
@@ -42,12 +43,13 @@ class SystemInformation
 
     public static function getMemoryInfo()
     {
-        if (!file_exists('/proc/meminfo')) return ['Memory Info' => 'Not available'];
+        if (!file_exists('/proc/meminfo'))
+            return ['Memory Info' => 'Not available'];
         $meminfo = file_get_contents('/proc/meminfo');
         preg_match('/MemTotal:\s+(\d+)/', $meminfo, $total);
         preg_match('/MemAvailable:\s+(\d+)/', $meminfo, $available);
-        $total = isset($total[1]) ? (int)$total[1] * 1024 : 0;
-        $available = isset($available[1]) ? (int)$available[1] * 1024 : 0;
+        $total = isset($total[1]) ? (int) $total[1] * 1024 : 0;
+        $available = isset($available[1]) ? (int) $available[1] * 1024 : 0;
         $used = $total - $available;
         return [
             'Total' => self::formatBytes($total),
@@ -61,16 +63,17 @@ class SystemInformation
     {
         $disks = [];
         $df = shell_exec('df -B1');
-        if (!$df) return ['Disk Info' => 'Not available'];
+        if (!$df)
+            return ['Disk Info' => 'Not available'];
         foreach (explode("\n", $df) as $line) {
             if (preg_match('/^\/dev\//', $line)) {
                 $parts = preg_split('/\s+/', $line);
                 if (count($parts) >= 6) {
                     $mount = $parts[5];
                     $disks[$mount] = [
-                        'Total' => self::formatBytes((int)$parts[1]),
-                        'Used' => self::formatBytes((int)$parts[2]),
-                        'Available' => self::formatBytes((int)$parts[3]),
+                        'Total' => self::formatBytes((int) $parts[1]),
+                        'Used' => self::formatBytes((int) $parts[2]),
+                        'Available' => self::formatBytes((int) $parts[3]),
                         'Usage' => $parts[4]
                     ];
                 }
@@ -81,8 +84,9 @@ class SystemInformation
 
     public static function getUptime()
     {
-        if (!file_exists('/proc/uptime')) return 'Not available';
-        $uptime = (int)file_get_contents('/proc/uptime');
+        if (!file_exists('/proc/uptime'))
+            return 'Not available';
+        $uptime = (int) file_get_contents('/proc/uptime');
         $days = floor($uptime / 86400);
         $hours = floor(($uptime % 86400) / 3600);
         $minutes = floor(($uptime % 3600) / 60);
@@ -103,7 +107,8 @@ class SystemInformation
     {
         $interfaces = [];
         $ifconfig = shell_exec('ifconfig -a');
-        if (!$ifconfig) return ['Network Info' => 'Not available'];
+        if (!$ifconfig)
+            return ['Network Info' => 'Not available'];
         preg_match_all('/^(\S+): flags/m', $ifconfig, $matches);
         foreach ($matches[1] as $interface) {
             preg_match("/$interface:.*?inet (\d+\.\d+\.\d+\.\d+)/s", $ifconfig, $ip);
@@ -124,11 +129,13 @@ class SystemInformation
     {
         $processes = [];
         $ps = shell_exec('ps aux --sort=-%mem');
-        if (!$ps) return ['Process List' => 'Not available'];
+        if (!$ps)
+            return ['Process List' => 'Not available'];
         $lines = explode("\n", $ps);
         array_shift($lines); // some versions of ps have a header
         foreach ($lines as $line) {
-            if (trim($line) === '') continue;
+            if (trim($line) === '')
+                continue;
             $columns = preg_split('/\s+/', $line, 11);
             if (count($columns) >= 11) {
                 $processes[] = [
