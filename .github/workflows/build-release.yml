@@ -1,0 +1,35 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '[v*.*]'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+
+      - name: Run build script
+        run: php build.php build
+
+      - name: Create release file
+        run: |
+          mkdir -p release
+          cp build/index.php release/index.php
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-file
+          path: release/index.php
