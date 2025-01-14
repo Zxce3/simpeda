@@ -79,7 +79,7 @@ class Builder
             $strings[$placeholder] = $matches[0];
             return $placeholder;
         }, $content);
-    
+
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
         $lines = explode("\n", $content);
         $result = [];
@@ -94,12 +94,12 @@ class Builder
         $content = preg_replace('/\s*([;{},()])\s*/', '$1', $content);
         $content = preg_replace('/<\?php\s*/', '<?php ', $content);
         $content = preg_replace('/([^}])}/', '$1 }', $content);
-        
+
         // Restore strings
         foreach ($strings as $placeholder => $string) {
             $content = str_replace($placeholder, $string, $content);
         }
-    
+
         return trim($content);
     }
 
@@ -181,7 +181,7 @@ class Builder
         }
 
         $timestamp = date('Y-m-d H:i:s');
-        $output = "<?php /* Built: {$timestamp} */ ?>\n" . $output;
+        $output = "<?php /* Built: {$timestamp} */ session_start(); ?>\n" . $output;
 
         $output = preg_replace('/\?>\s*<\?php/', '', $output);
         if (strpos($output, '?>') === false) {
@@ -239,13 +239,16 @@ class Builder
 }
 
 $sourceFiles = [
+    'src/error_page.php',
     'src/api.php',
     'src/dashboard.php',
     'src/SystemInformation.php',
     'src/install.php',
     'src/home.php',
+    'src/js_script.php',
     'src/css_style.php',
-    'src/js_script.php'
+    'src/auth.php',
+    'src/lib/pocketbase.php',
 ];
 $outputFile = 'build/index.php';
 
