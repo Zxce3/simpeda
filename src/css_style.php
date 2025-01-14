@@ -17,7 +17,12 @@ function getCssStyle()
             --card-bg: #2d2d2d;
             --border-color: #404040;
         }
-
+        * {
+            transition: background-color var(--transition-speed) ease,
+                color var(--transition-speed) ease,
+                border-color var(--transition-speed) ease,
+                box-shadow var(--transition-speed) ease;
+        }
         body {
             font-family: system-ui, -apple-system, sans-serif;
             background: var(--bg-color);
@@ -166,6 +171,40 @@ function getCssStyle()
             font-size: medium;
             padding: 4px;
         }
+
+        input[type="email"],
+        input[type="password"],
+        input[type="text"],
+        input[type="checkbox"],
+        button[type="submit"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--card-bg);
+            color: var(--text-color);
+            font-size: 1em;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        button[type="submit"] {
+            background: var(--border-color);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button[type="submit"]:hover {
+            background: var(--text-color);
+            color: var(--bg-color);
+        }
+
     </style>
     <?php
 }
