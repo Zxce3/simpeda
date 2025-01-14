@@ -10,9 +10,13 @@ function getThemeCode()
             localStorage.setItem('theme', theme);
         }
 
-        if (document.body) {
-            document.body.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+        function updateTheme() {
+            if (document.body) {
+                document.body.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+            }
         }
+
+        document.addEventListener('DOMContentLoaded', updateTheme);
     </script>
     <?php
 }
@@ -32,6 +36,10 @@ function getJavascriptCode()
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        throw new TypeError("Oops, we haven't got JSON!");
+                    }
                     return response.json();
                 })
                 .then(data => {
@@ -40,7 +48,7 @@ function getJavascriptCode()
                         <div class="card">
                             <h2>System Information</h2>
                             <ul class="data-list">
-                                ${Object.entries(data.basic).map(([k, v]) => `
+                                ${Object.entries(data.basic).map(([k,v]) => `
                                     <li><span>${k}</span><span>${v}</span></li>
                                 `).join('')}
                                 <li><span>Uptime</span><span>${data.uptime}</span></li>
@@ -50,7 +58,7 @@ function getJavascriptCode()
                         <div class="card">
                             <h2>CPU Information</h2>
                             <ul class="data-list">
-                                ${Object.entries(data.cpu).map(([k, v]) => `
+                                ${Object.entries(data.cpu).map(([k,v]) => `
                                     <li><span>${k}</span><span>${v}</span></li>
                                 `).join('')}
                             </ul>
@@ -59,7 +67,7 @@ function getJavascriptCode()
                         <div class="card">
                             <h2>Memory Usage</h2>
                             <ul class="data-list">
-                                ${Object.entries(data.memory).map(([k, v]) => `
+                                ${Object.entries(data.memory).map(([k,v]) => `
                                     <li><span>${k}</span><span>${v}</span></li>
                                 `).join('')}
                             </ul>
@@ -68,7 +76,7 @@ function getJavascriptCode()
                         <div class="card">
                             <h2>Load Average</h2>
                             <ul class="data-list">
-                                ${Object.entries(data.load).map(([k, v]) => `
+                                ${Object.entries(data.load).map(([k,v]) => `
                                     <li><span>${k}</span><span>${v}</span></li>
                                 `).join('')}
                             </ul>
@@ -80,7 +88,7 @@ function getJavascriptCode()
                                 <div class="accordion-header" onclick="toggleAccordion(event)">${mount}</div>
                                 <div class="accordion-content">
                                     <ul class="data-list">
-                                        ${Object.entries(info).map(([k, v]) => `
+                                        ${Object.entries(info).map(([k,v]) => `
                                             <li><span>${k}</span><span>${v}</span></li>
                                         `).join('')}
                                     </ul>
@@ -94,7 +102,7 @@ function getJavascriptCode()
                                 <div class="accordion-header" onclick="toggleAccordion(event)">${iface}</div>
                                 <div class="accordion-content">
                                     <ul class="data-list">
-                                        ${Object.entries(info).map(([k, v]) => `
+                                        ${Object.entries(info).map(([k,v]) => `
                                             <li><span>${k}</span><span>${v}</span></li>
                                         `).join('')}
                                     </ul>
@@ -134,7 +142,7 @@ function getJavascriptCode()
         }
 
         updateDashboard();
-        setInterval(updateDashboard, 30000); // Update every 30 seconds
+        setInterval(updateDashboard, 30000); 
     </script>
     <?php
 }
