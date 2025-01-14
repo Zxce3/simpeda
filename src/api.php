@@ -38,7 +38,18 @@ function handleGetRequests($path, $query)
 {
     $isHome = ($path === '/');
 
-    
+    if (!isPocketbaseInstalled()) {
+        if (isset($_GET['email']) && isset($_GET['password'])) {
+            $email = filter_var($_GET['email'], FILTER_SANITIZE_EMAIL);
+            $password = htmlspecialchars($_GET['password'], ENT_QUOTES, 'UTF-8');
+            installPocketbase($email, $password);
+            redirect('?login');
+        } else {
+            displayInstallForm();
+        }
+        return;
+    }
+
     if (isPocketbaseInstalled() && !isPocketbaseRunning()) {
         $port = findAvailablePort();
         if ($port) {
@@ -47,7 +58,6 @@ function handleGetRequests($path, $query)
         }
     }
 
-    
     if (isset($_GET['api'])) {
         header('Content-Type: application/json');
         echo json_encode([
@@ -64,7 +74,6 @@ function handleGetRequests($path, $query)
         exit;
     }
 
-    
     if (!empty($query)) {
         switch ($query) {
             case 'status':
@@ -102,16 +111,25 @@ function handleGetRequests($path, $query)
     }
 }
 
-
+function displayInstallForm()
+{
+    echo '<form method="GET" action="/">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <button type="submit">Install Pocketbase</button>
+          </form>';
+}
 
 function handlePostRequests($path)
 {
-    if ($path === '/install') {
+    if ($path === '?install') {
         $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
         $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
         installPocketbase($email, $password);
         sendResponse(['message' => 'Installation successful'], 200);
-    } elseif ($path === '/login') {
+    } elseif ($path === '?login') {
         $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
         $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
         $remember = isset($_POST['remember']);
@@ -219,26 +237,32 @@ function installPocketbase($email, $password)
     $filename = "pocketbase_{$version}_{$os}_{$arch}.zip";
     $url = "https://github.com/pocketbase/pocketbase/releases/download/v{$version}/$filename";
 
-    
     $downloaded = file_put_contents($filename, file_get_contents($url));
     if (!$downloaded) {
         sendResponse(['error' => 'Failed to download Pocketbase'], 500);
     }
 
-    $zip = new ZipArchive;
-    if ($zip->open($filename) !== true) {
+    $unzipCommand = sprintf('unzip -o %s -d %s', escapeshellarg($filename), escapeshellarg(POCKETBASE_PATH));
+    exec($unzipCommand, $output, $return_var);
+    if ($return_var !== 0) {
         unlink($filename);
         sendResponse(['error' => 'Failed to extract Pocketbase'], 500);
     }
-
-    $zip->extractTo(POCKETBASE_PATH);
-    $zip->close();
     unlink($filename);
 
-    
+    $command = sprintf(
+        '%s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
+        escapeshellcmd(POCKETBASE_PATH),
+        (int) DEFAULT_PORT,
+        escapeshellcmd(POCKETBASE_DATA_PATH),
+        escapeshellcmd(POCKETBASE_LOG)
+    );
+    exec($command);
+    sleep(5); // Wait for Pocketbase to start
+
     $command = escapeshellcmd(POCKETBASE_PATH . "/pocketbase superuser create " .
         escapeshellarg($email) . " " .
-        escapeshellarg($password) . " --dir " . POCKETBASE_DATA_PATH);
+        escapeshellarg($password));
     exec($command, $output, $return_var);
     if ($return_var !== 0) {
         sendResponse(['error' => 'Failed to create superuser'], 500);
@@ -250,12 +274,10 @@ function installPocketbase($email, $password)
 function createUser($email, $password)
 {
     $client = new PocketBaseClient('http://127.0.0.1:' . DEFAULT_PORT);
-    $response = $client->post("/api/collections/users/create", [
+    $response = $client->post("/api/collections/users/records", [
         'email' => $email,
         'password' => $password,
         'passwordConfirm' => $password,
-        'emailVisibility' => true,
-        'verified' => true,
         'name' => 'User'
     ]);
     if (!isset($response['id'])) {
@@ -266,12 +288,14 @@ function createUser($email, $password)
 function startPocketbase($port)
 {
     $command = sprintf(
-        'nohup %s/pocketbase serve --http="127.0.0.1:%d" > %s 2>&1 &',
+        'nohup %s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
         escapeshellcmd(POCKETBASE_PATH),
         (int) $port,
+        escapeshellcmd(POCKETBASE_DATA_PATH),
         escapeshellcmd(POCKETBASE_LOG)
     );
     exec($command);
+    sleep(5); // Wait for Pocketbase to start
 }
 
 function sendResponse($data, $status = 200)
