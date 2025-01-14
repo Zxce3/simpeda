@@ -2,10 +2,8 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - master
     tags:
-      - 'v*.*'
+      - 'v*'
 
 jobs:
   build:
@@ -33,3 +31,23 @@ jobs:
         with:
           name: release-file
           path: release/index.php
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: release/index.php
+          asset_name: index.php
+          tag: ${{ github.ref }}
+          overwrite: true
