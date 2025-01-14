@@ -72,6 +72,21 @@ class Builder
 
     private function minifyPHP(string $content): string
     {
+        return $this->minifyCode($content, ['<?php ', '?>']);
+    }
+
+    private function minifyJS(string $content): string
+    {
+        return $this->minifyCode($content);
+    }
+
+    private function minifyCSS(string $content): string
+    {
+        return $this->minifyCode($content);
+    }
+
+    private function minifyCode(string $content, array $phpTags = []): string
+    {
         // Preserve strings
         $strings = [];
         $content = preg_replace_callback('/([\'"])((?:\\\\.|(?!\1).)*)\1/s', function ($matches) use (&$strings) {
@@ -80,7 +95,10 @@ class Builder
             return $placeholder;
         }, $content);
 
+        // Remove comments
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
+
+        // Remove single-line comments and empty lines
         $lines = explode("\n", $content);
         $result = [];
         foreach ($lines as $line) {
@@ -90,66 +108,22 @@ class Builder
             }
         }
         $content = implode("\n", $result);
+
+        // Minify whitespace
         $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{},()])\s*/', '$1', $content);
-        $content = preg_replace('/<\?php\s*/', '<?php ', $content);
-        $content = preg_replace('/([^}])}/', '$1 }', $content);
+        $content = preg_replace('/\s*([;{}(),:])\s*/', '$1', $content);
 
         // Restore strings
         foreach ($strings as $placeholder => $string) {
             $content = str_replace($placeholder, $string, $content);
         }
 
-        return trim($content);
-    }
-
-    private function minifyJS(string $content): string
-    {
-        $strings = [];
-        $content = preg_replace_callback('/([\'"])((?:\\\\.|(?!\1).)*)\1/s', function ($matches) use (&$strings) {
-            $placeholder = '___STRING_' . count($strings) . '___';
-            $strings[$placeholder] = $matches[0];
-            return $placeholder;
-        }, $content);
-
-        $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-
-        $lines = explode("\n", $content);
-        $result = [];
-        foreach ($lines as $line) {
-            $line = preg_replace('/(?<!:)\/\/.*$/', '', $line);
-            if (trim($line) !== '') {
-                $result[] = $line;
-            }
+        // Additional PHP-specific minification
+        if (!empty($phpTags)) {
+            $content = preg_replace('/\s*' . preg_quote($phpTags[0], '/') . '/', $phpTags[0], $content);
+            $content = preg_replace('/' . preg_quote($phpTags[1], '/') . '\s*/', $phpTags[1], $content);
+            $content = preg_replace('/([^}])}/', '$1 }', $content);
         }
-        $content = implode("\n", $result);
-
-        $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{}(),])\s*/', '$1', $content);
-
-        foreach ($strings as $placeholder => $string) {
-            $content = str_replace($placeholder, $string, $content);
-        }
-
-        return trim($content);
-    }
-
-    private function minifyCSS(string $content): string
-    {
-        $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-
-        $lines = explode("\n", $content);
-        $result = [];
-        foreach ($lines as $line) {
-            $line = preg_replace('/(?<!:)\/\/.*$/', '', $line);
-            if (trim($line) !== '') {
-                $result[] = $line;
-            }
-        }
-        $content = implode("\n", $result);
-
-        $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{}(),:])\s*/', '$1', $content);
 
         return trim($content);
     }
