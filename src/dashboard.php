@@ -1,5 +1,5 @@
 <?php
-// Function to display the dashboard
+
 function displayDashboard()
 {
     if (!file_exists('pocketbase/pb_data')) {
@@ -21,6 +21,9 @@ function displayDashboard()
             <div class="header">
                 <h1>Server Dashboard <span class="badge">V2.1</span></h1>
                 <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+                <form method="POST" action="?logout" style="display:inline;">
+                    <button type="submit">Logout</button>
+                </form>
             </div>
             <div class="grid" id="dashboard">
                 <!-- Content will be loaded via JavaScript -->
