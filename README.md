@@ -1,4 +1,4 @@
-# Server Dashboard
+# SIMPEDA
 
 <div style="text-align: center;">
   <img src="https://github.com/user-attachments/assets/a07ba3fb-5b64-49fa-8ccc-fc78d3321570" alt="Server Dashboard" style="width: 50%; height: auto;">
