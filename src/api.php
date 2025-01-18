@@ -1,7 +1,5 @@
 <?php
 
-
-
 const POCKETBASE_PATH = 'pocketbase';
 const POCKETBASE_DATA_PATH = 'pocketbase/pb_data';
 const POCKETBASE_LOG = 'pocketbase.log';
@@ -113,6 +111,7 @@ function handleGetRequests($path, $query)
 
 function displayInstallForm()
 {
+    echo getCssStyle();
     echo '<form method="GET" action="/">
             <label for="email">Email:</label>
             <input type="email" id="email" name="email" required>
@@ -267,22 +266,12 @@ function installPocketbase($email, $password)
     if ($return_var !== 0) {
         sendResponse(['error' => 'Failed to create superuser'], 500);
     }
-    createUser($email, $password); 
-    return true;
-}
 
-function createUser($email, $password)
-{
     $client = new PocketBaseClient('http://127.0.0.1:' . DEFAULT_PORT);
-    $response = $client->post("/api/collections/users/records", [
-        'email' => $email,
-        'password' => $password,
-        'passwordConfirm' => $password,
-        'name' => 'User'
-    ]);
-    if (!isset($response['id'])) {
-        sendResponse(['error' => 'Failed to create user'], 500);
-    }
+    $client->authWithPassword($email, $password);
+    createSystemInformationSchema($client, $email, $password);
+
+    return true;
 }
 
 function startPocketbase($port)
