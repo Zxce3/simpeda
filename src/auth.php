@@ -52,7 +52,7 @@ class Auth
 
         if ($token) {
             $client = new PocketBaseClient(self::POCKETBASE_URL, $token);
-            $response = $client->post("/api/collections/users/refresh-token", ['token' => $token]);
+            $response = $client->post("/api/collections/_superusers/auth-refresh", ['token' => $token]);
             if (isset($response['token'])) {
                 self::setAuthCookie($response['token'], true);
                 return true;
@@ -130,19 +130,14 @@ class Auth
     public static function authenticateUser($email, $password)
     {
         $client = new PocketBaseClient(self::POCKETBASE_URL);
-        $response = $client->post("/api/collections/users/auth-with-password", [
+        $response = $client->post("/api/collections/_superusers/auth-with-password", [
             'identity' => $email,
             'password' => $password
         ]);
         return $response['token'] ?? null;
     }
 
-    public static function refreshAuthToken($token)
-    {
-        $client = new PocketBaseClient(self::POCKETBASE_URL, $token);
-        $response = $client->post("/api/collections/users/auth-refresh", new stdClass());
-        return $response['token'] ?? null;
-    }
+    
 }
 
 function handleLogin()
@@ -161,7 +156,7 @@ function handleLogin()
 
         $token = Auth::authenticateUser($email, $password);
         if ($token) {
-            $refreshedToken = Auth::refreshAuthToken($token); 
+            $refreshedToken = Auth::refreshToken(); 
             if ($refreshedToken) {
                 Auth::setAuthCookie($refreshedToken, $remember);
                 session_regenerate_id(true);  
