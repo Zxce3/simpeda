@@ -11,6 +11,11 @@ class PocketBaseClient
         $this->token = $token;
     }
 
+    public function createCollection($data)
+    {
+        return $this->post('/api/collections', $data);
+    }
+
     private function request($method, $endpoint, $data = null)
     {
         $url = $this->baseUrl . $endpoint;
@@ -117,6 +122,20 @@ class PocketBaseClient
             throw new Exception('SSE Request Error: ' . curl_error($ch));
         }
         curl_close($ch);
+    }
+
+    public function authWithPassword($email, $password)
+    {
+        $response = $this->post('/api/collections/_superusers/auth-with-password', [
+            'identity' => $email,
+            'password' => $password,
+        ]);
+
+        if (isset($response['token'])) {
+            $this->token = $response['token'];
+        } else {
+            throw new Exception('Authentication failed');
+        }
     }
 }
 ?>
