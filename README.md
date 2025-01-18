@@ -1,5 +1,8 @@
-# Server Dashboard
+# SIMPEDA
 
+<div style="text-align: center;">
+  <img src="https://github.com/user-attachments/assets/a07ba3fb-5b64-49fa-8ccc-fc78d3321570" alt="Server Dashboard" style="width: 50%; height: auto;">
+</div>
 This project provides a simplified system information display for a server dashboard. It retrieves and displays various system information such as CPU usage, memory usage, disk usage, network interfaces, and process list.
 
 ## Features
