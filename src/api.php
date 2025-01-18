@@ -67,6 +67,11 @@ function handleGetRequests($path, $query)
             'load' => SystemInformation::getLoadAverage(),
             'network' => SystemInformation::getNetworkInfo(),
             'processes' => SystemInformation::getProcessList(),
+            'swap' => SystemInformation::getSwapInfo(),
+            'users' => SystemInformation::getUserInfo(),
+            'security' => SystemInformation::getSecurityInfo(),
+            'logs' => SystemInformation::getLogInfo(),
+            'temperature' => SystemInformation::getTemperatureInfo(),
             'timestamp' => date('Y-m-d H:i:s T')
         ]);
         exit;
@@ -112,13 +117,7 @@ function handleGetRequests($path, $query)
 function displayInstallForm()
 {
     echo getCssStyle();
-    echo '<form method="GET" action="/">
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" required>
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-            <button type="submit">Install Pocketbase</button>
-          </form>';
+    echo '<form method="GET" action="/"><label for="email">Email:</label><input type="email" id="email" name="email" required><label for="password">Password:</label><input type="password" id="password" name="password" required><button type="submit">Install Pocketbase</button></form>';
 }
 
 function handlePostRequests($path)

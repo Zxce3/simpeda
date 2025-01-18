@@ -149,6 +149,78 @@ class SystemInformation
         }
         return $processes;
     }
-}
 
+    public static function getSwapInfo()
+    {
+        if (!file_exists('/proc/meminfo'))
+            return ['Swap Info' => 'Not available'];
+        $meminfo = file_get_contents('/proc/meminfo');
+        preg_match('/SwapTotal:\s+(\d+)/', $meminfo, $total);
+        preg_match('/SwapFree:\s+(\d+)/', $meminfo, $free);
+        $total = isset($total[1]) ? (int) $total[1] * 1024 : 0;
+        $free = isset($free[1]) ? (int) $free[1] * 1024 : 0;
+        $used = $total - $free;
+        $usage = $total > 0 ? round(($used / $total) * 100, 2) . '%' : '0%';
+        return [
+            'Total' => self::formatBytes($total),
+            'Used' => self::formatBytes($used),
+            'Free' => self::formatBytes($free),
+            'Usage' => $usage
+        ];
+    }
+
+    public static function getUserInfo()
+    {
+        $users = [];
+        $who = shell_exec('who');
+        if (!$who)
+            return ['User Info' => 'Not available'];
+        foreach (explode("\n", $who) as $line) {
+            if (trim($line) === '')
+                continue;
+            $parts = preg_split('/\s+/', $line);
+            if (count($parts) >= 5) {
+                $users[] = [
+                    'User' => $parts[0],
+                    'Terminal' => $parts[1],
+                    'Host' => $parts[2],
+                    'Login Time' => $parts[3] . ' ' . $parts[4]
+                ];
+            }
+        }
+        return $users;
+    }
+
+    public static function getSecurityInfo()
+    {
+        $firewallStatus = shell_exec('command -v ufw >/dev/null 2>&1 && sudo ufw status');
+        return [
+            'Firewall Status' => $firewallStatus ?: 'Not available'
+        ];
+    }
+
+    public static function getLogInfo()
+    {
+        if (!file_exists('/var/log/syslog'))
+            return ['Log Info' => 'Not available'];
+        $logs = [];
+        $logEntries = shell_exec('tail -n 100 /var/log/syslog');
+        if (!$logEntries)
+            return ['Log Info' => 'Not available'];
+        foreach (explode("\n", $logEntries) as $line) {
+            if (trim($line) === '')
+                continue;
+            $logs[] = $line;
+        }
+        return $logs;
+    }
+
+    public static function getTemperatureInfo()
+    {
+        $temperature = shell_exec('command -v sensors >/dev/null 2>&1 && sensors');
+        return [
+            'Temperature' => $temperature ?: 'Not available'
+        ];
+    }
+}
 ?>
