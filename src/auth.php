@@ -156,15 +156,10 @@ function handleLogin()
 
         $token = Auth::authenticateUser($email, $password);
         if ($token) {
-            $refreshedToken = Auth::refreshToken(); 
-            if ($refreshedToken) {
-                Auth::setAuthCookie($refreshedToken, $remember);
-                session_regenerate_id(true);  
-                header('Location: ?dashboard');
-                exit;
-            } else {
-                displayLoginForm('Failed to refresh token.', $isHome);
-            }
+            Auth::setAuthCookie($token, $remember);
+            session_regenerate_id(true);  
+            header('Location: ?dashboard');
+            exit;
         } else {
             displayLoginForm('Invalid email or password.', $isHome);
         }
