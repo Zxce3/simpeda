@@ -141,14 +141,21 @@ class Builder
                 echo "Warning: Source file '$file' not found!\n";
                 continue;
             }
-            $content = file_get_contents($file);
+            $content = @file_get_contents($file);
+            if ($content === false) {
+                echo "Error: Could not read file '$file'\n";
+                continue;
+            }
             $content = $this->minifyContent($content);
             $output .= $content . "\n";
         }
 
         $buildDir = dirname($this->outputFile);
         if (!is_dir($buildDir)) {
-            mkdir($buildDir, 0777, true);
+            if (!mkdir($buildDir, 0777, true) && !is_dir($buildDir)) {
+                echo "Error: Could not create directory '$buildDir'\n";
+                return;
+            }
         }
 
         $timestamp = date('Y-m-d H:i:s');
@@ -162,7 +169,10 @@ class Builder
         $output = preg_replace('/\?>\s*\/\*/', '?> /*', $output);
         $output = preg_replace('/\*\/\s*<\?php/', '*/ <?php', $output);
 
-        file_put_contents($this->outputFile, $output);
+        if (file_put_contents($this->outputFile, $output) === false) {
+            echo "Error: Could not write to file '{$this->outputFile}'\n";
+            return;
+        }
         echo "Build completed: {$this->outputFile}\n";
     }
 
@@ -208,20 +218,13 @@ class Builder
         shell_exec($command);
     }
 }
+$sourceFiles = array_merge(
+    glob('src/*.php') ?: [],
+    glob('src/lib/*.php') ?: [],
+    glob('src/components/*.php') ?: [],
+    glob('src/pages/*.php') ?: []
+);
 
-$sourceFiles = [
-    'src/error_page.php',
-    'src/api.php',
-    'src/dashboard.php',
-    'src/SystemInformation.php',
-    'src/install.php',
-    'src/home.php',
-    'src/js_script.php',
-    'src/css_style.php',
-    'src/auth.php',
-    'src/lib/schema.php',
-    'src/lib/pocketbase.php',
-];
 $outputFile = 'build/index.php';
 
 $builder = new Builder($sourceFiles, $outputFile);
