@@ -1,5 +1,5 @@
 <?php
-getThemeCode();
+
 function getCssStyle()
 {
     ?>
