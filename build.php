@@ -74,22 +74,14 @@ class Builder
     {
         // Preserve strings
         $strings = [];
-        $content = preg_replace_callback('/([\'"])((?:\\\\.|(?!\1).)*)\1/s', function ($matches) use (&$strings) {
+        $content = preg_replace_callback('/([\'"])(?:\\\\.|(?!\1).)*\1/s', function ($matches) use (&$strings) {
             $placeholder = '___STRING_' . count($strings) . '___';
             $strings[$placeholder] = $matches[0];
             return $placeholder;
         }, $content);
 
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-        $lines = explode("\n", $content);
-        $result = [];
-        foreach ($lines as $line) {
-            $line = preg_replace('/(?<!:)\/\/.*$/', '', $line);
-            if (trim($line) !== '') {
-                $result[] = $line;
-            }
-        }
-        $content = implode("\n", $result);
+        $content = preg_replace('/(?<!:)\/\/.*$/m', '', $content);
         $content = preg_replace('/\s+/s', ' ', $content);
         $content = preg_replace('/\s*([;{},()])\s*/', '$1', $content);
         $content = preg_replace('/<\?php\s*/', '<?php ', $content);
@@ -106,24 +98,14 @@ class Builder
     private function minifyJS(string $content): string
     {
         $strings = [];
-        $content = preg_replace_callback('/([\'"])((?:\\\\.|(?!\1).)*)\1/s', function ($matches) use (&$strings) {
+        $content = preg_replace_callback('/([\'"])(?:\\\\.|(?!\1).)*\1/s', function ($matches) use (&$strings) {
             $placeholder = '___STRING_' . count($strings) . '___';
             $strings[$placeholder] = $matches[0];
             return $placeholder;
         }, $content);
 
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-
-        $lines = explode("\n", $content);
-        $result = [];
-        foreach ($lines as $line) {
-            $line = preg_replace('/(?<!:)\/\/.*$/', '', $line);
-            if (trim($line) !== '') {
-                $result[] = $line;
-            }
-        }
-        $content = implode("\n", $result);
-
+        $content = preg_replace('/(?<!:)\/\/.*$/m', '', $content);
         $content = preg_replace('/\s+/s', ' ', $content);
         $content = preg_replace('/\s*([;{}(),])\s*/', '$1', $content);
 
@@ -137,17 +119,6 @@ class Builder
     private function minifyCSS(string $content): string
     {
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-
-        $lines = explode("\n", $content);
-        $result = [];
-        foreach ($lines as $line) {
-            $line = preg_replace('/(?<!:)\/\/.*$/', '', $line);
-            if (trim($line) !== '') {
-                $result[] = $line;
-            }
-        }
-        $content = implode("\n", $result);
-
         $content = preg_replace('/\s+/s', ' ', $content);
         $content = preg_replace('/\s*([;{}(),:])\s*/', '$1', $content);
 
