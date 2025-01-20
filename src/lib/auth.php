@@ -1,37 +1,4 @@
 <?php
-
-function displayLoginForm($error = '', $isHome = false)
-{
-    if (!isUserAuthenticated() && !$isHome) {
-        ?>
-        <!DOCTYPE html>
-        <html lang="en">
-
-        <head>
-            <title>Login</title>
-            <?php getCssStyle(); ?>
-        </head>
-
-        <body data-theme="">
-            <div class="container">
-                <form class="card" method="POST" action="?login">
-                    <?php if ($error): ?>
-                        <p style="color:red;"><?= htmlspecialchars($error) ?></p>
-                    <?php endif; ?>
-                    <input type="email" name="email" placeholder="Email" required />
-                    <input type="password" name="password" placeholder="Password" required />
-                    <input type="checkbox" name="remember"> Remember me
-                    <button type="submit">Login</button>
-                </form>
-                
-            </div>
-        </body>
-
-        </html>
-        <?php
-    }
-}
-
 class Auth
 {
     const POCKETBASE_URL = 'http://127.0.0.1:8090';
@@ -146,7 +113,7 @@ function handleLogin()
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_GET['logout'])) {
             Auth::logout();
-            header('Location: ?login');
+            header('Location: login');
             exit;
         }
 
@@ -158,7 +125,7 @@ function handleLogin()
         if ($token) {
             Auth::setAuthCookie($token, $remember);
             session_regenerate_id(true);  
-            header('Location: ?dashboard');
+            header('Location: /dashboard');
             exit;
         } else {
             displayLoginForm('Invalid email or password.', $isHome);
