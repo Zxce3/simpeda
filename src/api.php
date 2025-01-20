@@ -34,28 +34,6 @@ function isPocketbaseInstalled()
 }
 function handleGetRequests($path, $query)
 {
-    $isHome = ($path === '/');
-
-    if (!isPocketbaseInstalled()) {
-        if (isset($_GET['email']) && isset($_GET['password'])) {
-            $email = filter_var($_GET['email'], FILTER_SANITIZE_EMAIL);
-            $password = htmlspecialchars($_GET['password'], ENT_QUOTES, 'UTF-8');
-            installPocketbase($email, $password);
-            redirect('?login');
-        } else {
-            displayInstallForm();
-        }
-        return;
-    }
-
-    if (isPocketbaseInstalled() && !isPocketbaseRunning()) {
-        $port = findAvailablePort();
-        if ($port) {
-            startPocketbase($port);
-            sleep(2); 
-        }
-    }
-
     if (isset($_GET['api'])) {
         header('Content-Type: application/json');
         echo json_encode([
@@ -81,36 +59,58 @@ function handleGetRequests($path, $query)
         switch ($query) {
             case 'status':
                 handlePocketbaseStatus();
-                break;
+                return;
             case 'dashboard':
                 if (!isUserAuthenticated()) {
-                    redirect('?login');
+                    redirect('/login');
                     return;
                 }
-                displayDashboard();
-                break;
+                if (!web_router('dashboard')) {
+                    displayErrorPage();
+                }
+                return;
             case 'login':
                 if (isUserAuthenticated()) {
-                    redirect('?dashboard');
+                    redirect('/dashboard');
                     return;
                 }
-                if (!$isHome) {
-                    displayLoginForm();
+                if (!web_router('login')) {
+                    displayErrorPage();
                 }
-                break;
+                return;
             default:
                 displayErrorPage();
-                break;
+                return;
         }
-    } else {
-        switch ($path) {
-            case '/':
-                displayHome();
-                break;
-            default:
-                displayErrorPage();
-                break;
+    }
+
+    if (!isPocketbaseInstalled()) {
+        if (isset($_GET['email']) && isset($_GET['password'])) {
+            $email = filter_var($_GET['email'], FILTER_SANITIZE_EMAIL);
+            $password = htmlspecialchars($_GET['password'], ENT_QUOTES, 'UTF-8');
+            installPocketbase($email, $password);
+            redirect('/login');
+        } else {
+            web_router('install');
         }
+        return;
+    }
+
+    if (isPocketbaseInstalled() && !isPocketbaseRunning()) {
+        $port = findAvailablePort();
+        if ($port) {
+            startPocketbase($port);
+            sleep(2);
+        }
+    }
+
+    if ($path === '/install' && isPocketbaseInstalled() && isPocketbaseRunning()) {
+        redirect('/');
+        return;
+    }
+
+    if (!web_router(ltrim($path, '/'))) {
+        displayErrorPage();
     }
 }
 
@@ -122,12 +122,12 @@ function displayInstallForm()
 
 function handlePostRequests($path)
 {
-    if ($path === '?install') {
+    if ($path === '/install') {
         $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
         $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
         installPocketbase($email, $password);
         sendResponse(['message' => 'Installation successful'], 200);
-    } elseif ($path === '?login') {
+    } elseif ($path === '/login') {
         $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
         $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
         $remember = isset($_POST['remember']);
@@ -135,7 +135,7 @@ function handlePostRequests($path)
         $token = Auth::authenticateUser($email, $password);
         if ($token) {
             Auth::setAuthCookie($token, $remember);
-            session_regenerate_id(true);  
+            session_regenerate_id(true);
             sendResponse(['message' => 'Login successful'], 200);
         } else {
             sendResponse(['message' => 'Invalid email or password'], 401);
@@ -182,7 +182,7 @@ function isPocketbaseRunning()
         curl_exec($ch);
         if (curl_errno($ch)) {
             curl_close($ch);
-            return false; 
+            return false;
         }
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -256,7 +256,7 @@ function installPocketbase($email, $password)
         escapeshellcmd(POCKETBASE_LOG)
     );
     exec($command);
-    sleep(5); // Wait for Pocketbase to start
+    sleep(5);
 
     $command = escapeshellcmd(POCKETBASE_PATH . "/pocketbase superuser create " .
         escapeshellarg($email) . " " .
@@ -283,13 +283,13 @@ function startPocketbase($port)
         escapeshellcmd(POCKETBASE_LOG)
     );
     exec($command);
-    sleep(5); // Wait for Pocketbase to start
+    sleep(5);
 }
 
 function sendResponse($data, $status = 200)
 {
     header("HTTP/1.1 " . $status);
-    
+
     echo json_encode($data);
 }
 
