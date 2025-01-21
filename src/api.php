@@ -15,12 +15,21 @@ function handleRequest()
     $path = $parsedUri['path'] ?? '/';
     $query = $parsedUri['query'] ?? '';
 
-    if ($method === 'GET') {
-        handleGetRequests($path, $query);
-    } elseif ($method === 'POST') {
-        handlePostRequests($path);
-    } else {
-        sendResponse(['error' => 'Method not allowed'], 405);
+    try {
+        if (!isPocketbaseInstalled() && $path !== '/install') {
+            redirect('/install');
+        }
+
+        if ($method === 'GET') {
+            handleGetRequests($path, $query);
+        } elseif ($method === 'POST') {
+            handlePostRequests($path);
+        } else {
+            sendResponse(['error' => 'Method not allowed'], 405);
+        }
+    } catch (Exception $e) {
+        error_log($e->getMessage());
+        sendResponse(['error' => 'Internal Server Error'], 500);
     }
 }
 function redirect($location)
@@ -188,6 +197,7 @@ function isPocketbaseRunning()
         curl_close($ch);
         return $httpCode === 200;
     } catch (Exception $e) {
+        error_log($e->getMessage());
         return false;
     }
 }
@@ -258,6 +268,11 @@ function installPocketbase($email, $password)
     exec($command);
     sleep(5);
 
+    if (!isPocketbaseRunning()) {
+        error_log('Failed to start Pocketbase during installation');
+        sendResponse(['error' => 'Failed to start Pocketbase during installation'], 500);
+    }
+
     $command = escapeshellcmd(POCKETBASE_PATH . "/pocketbase superuser create " .
         escapeshellarg($email) . " " .
         escapeshellarg($password));
@@ -284,6 +299,11 @@ function startPocketbase($port)
     );
     exec($command);
     sleep(5);
+
+    if (!isPocketbaseRunning()) {
+        error_log('Failed to start Pocketbase on port ' . $port);
+        sendResponse(['error' => 'Failed to start Pocketbase'], 500);
+    }
 }
 
 function sendResponse($data, $status = 200)
