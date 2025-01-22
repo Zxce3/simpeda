@@ -1,374 +1,364 @@
 <?php
 
-function createSystemInformationSchema(PocketBaseClient $pocketBaseClient, $email, $password) {
+function createSystemInformationSchema(PocketBaseClient $pocketBaseClient, $email, $password)
+{
     $pocketBaseClient->authWithPassword($email, $password);
 
     $collections = [
-        'system_info' => [
-            'name' => 'system_info',
+        'global_info' => [
+            'id' => 'pbc_global_info',
+            'name' => 'global_info',
             'type' => 'base',
-            'fields' => array_merge(
-                getHostnameField(),
-                getOsField(),
-                getPhpVersionField(),
-                getServerSoftwareField(),
-                getTimestampFields()
-            )
         ],
-        'cpu_info' => [
-            'name' => 'cpu_info',
+        'server' => [
+            'id' => 'pbc_server',
+            'name' => 'server',
             'type' => 'base',
-            'fields' => array_merge(
-                getCpuModelField(),
-                getCpuCoresField(),
-                getCpuUsageField(),
-                getTimestampFields()
-            )
         ],
-        'memory_info' => [
-            'name' => 'memory_info',
+        'host' => [
+            'id' => 'pbc_host',
+            'name' => 'host',
             'type' => 'base',
-            'fields' => array_merge(
-                getMemoryFields(),
-                getTimestampFields()
-            )
         ],
-        'disk_info' => [
-            'name' => 'disk_info',
+        'cpu' => [
+            'id' => 'pbc_cpu',
+            'name' => 'cpu',
             'type' => 'base',
-            'fields' => array_merge(
-                getDiskFields(),
-                getTimestampFields()
-            )
         ],
-        'swap_info' => [
-            'name' => 'swap_info',
+        'state' => [
+            'id' => 'pbc_state',
+            'name' => 'state',
             'type' => 'base',
-            'fields' => array_merge(
-                getSwapFields(),
-                getTimestampFields()
-            )
-        ],
-        'network_info' => [
-            'name' => 'network_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getNetworkInfoField(),
-                getNetworkSpeedField(),
-                getTimestampFields()
-            )
-        ],
-        'process_info' => [
-            'name' => 'process_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getProcessListField(),
-                getTimestampFields()
-            )
-        ],
-        'uptime_info' => [
-            'name' => 'uptime_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getUptimeField(),
-                getTimestampFields()
-            )
-        ],
-        'load_average_info' => [
-            'name' => 'load_average_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getLoadAverageField(),
-                getTimestampFields()
-            )
-        ],
-        'user_info' => [
-            'name' => 'user_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getConnectedUsersField(),
-                getTimestampFields()
-            )
-        ],
-        'security_info' => [
-            'name' => 'security_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getFirewallStatusField(),
-                getSecurityUpdatesField(),
-                getTimestampFields()
-            )
-        ],
-        'log_info' => [
-            'name' => 'log_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getRecentLogEntriesField(),
-                getTimestampFields()
-            )
-        ],
-        'temperature_info' => [
-            'name' => 'temperature_info',
-            'type' => 'base',
-            'fields' => array_merge(
-                getTemperatureField(),
-                getTimestampFields()
-            )
         ]
     ];
-    
 
+   
     foreach ($collections as $collectionData) {
         $pocketBaseClient->createCollection($collectionData);
     }
+
+   
+    $pocketBaseClient->updateCollection('pbc_global_info', [
+        'fields' => array_merge(
+            getNowField(),
+            getOnlineField(),
+            getTimestampFields()
+        )
+    ]);
+
+    $pocketBaseClient->updateCollection('pbc_server', [
+        'fields' => array_merge(
+            getNameField(),
+            getCountryCodeField(),
+            getLastActiveField(),
+            getGlobalInfoIdField(),
+            getTimestampFields()
+        )
+    ]);
+
+    $pocketBaseClient->updateCollection('pbc_host', [
+        'fields' => array_merge(
+            getPlatformField(),
+            getMemTotalField(),
+            getDiskTotalField(),
+            getSwapTotalField(),
+            getArchField(),
+            getBootTimeField(),
+            getServerIdField(),
+            getTimestampFields()
+        )
+    ]);
+
+    $pocketBaseClient->updateCollection('pbc_cpu', [
+        'fields' => array_merge(
+            getDescriptionField(),
+            getHostIdField(),
+            getTimestampFields()
+        )
+    ]);
+
+    $pocketBaseClient->updateCollection('pbc_state', [
+        'fields' => array_merge(
+            getCpuUsageField(),
+            getMemUsedField(),
+            getDiskUsedField(),
+            getNetInTransferField(),
+            getNetOutTransferField(),
+            getNetInSpeedField(),
+            getNetOutSpeedField(),
+            getUptimeField(),
+            getServerIdField(),
+            getTimestampFields()
+        )
+    ]);
 }
 
-function getHostnameField() {
+function getNowField()
+{
     return [
         [
-            'name' => 'hostname',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getOsField() {
-    return [
-        [
-            'name' => 'os',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getPhpVersionField() {
-    return [
-        [
-            'name' => 'php_version',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getServerSoftwareField() {
-    return [
-        [
-            'name' => 'server_software',
-            'type' => 'text',
-            'required' => false,
-        ]
-    ];
-}
-
-function getCpuModelField() {
-    return [
-        [
-            'name' => 'cpu_model',
-            'type' => 'text',
-            'required' => false,
-        ]
-    ];
-}
-
-function getCpuCoresField() {
-    return [
-        [
-            'name' => 'cpu_cores',
+            'name' => 'now',
             'type' => 'number',
-            'required' => false,
+            'required' => true,
         ]
     ];
 }
 
-function getCpuUsageField() {
+function getOnlineField()
+{
     return [
         [
-            'name' => 'cpu_usage',
-            'type' => 'text',
-            'required' => false,
+            'name' => 'online',
+            'type' => 'number',
+            'required' => true,
         ]
     ];
 }
 
-function getMemoryFields() {
+function getServerIdField()
+{
     return [
         [
-            'name' => 'memory_total',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'memory_used',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'memory_available',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'memory_usage',
-            'type' => 'text',
-            'required' => false,
+            'name' => 'server_id',
+            'type' => 'relation',
+            'maxSelect' => 1,
+            'collectionId' => 'pbc_server',
+            'cascadeDelete' => true,
+            'required' => true,
         ]
     ];
 }
 
-function getDiskFields() {
+function getNameField()
+{
+    return [
+        [
+            'name' => 'name',
+            'type' => 'text',
+            'required' => true,
+        ]
+    ];
+}
+
+function getCountryCodeField()
+{
+    return [
+        [
+            'name' => 'country_code',
+            'type' => 'text',
+            'required' => true,
+        ]
+    ];
+}
+
+function getLastActiveField()
+{
+    return [
+        [
+            'name' => 'last_active',
+            'type' => 'autodate',
+            'required' => true,
+            'onCreate' => true,
+            'onUpdate' => true,
+        ]
+    ];
+}
+
+function getGlobalInfoIdField()
+{
+    return [
+        [
+            'name' => 'global_info_id',
+            'type' => 'relation',
+            'maxSelect' => 1,
+            'collectionId' => 'pbc_global_info',
+            'cascadeDelete' => true,
+            'required' => true,
+        ]
+    ];
+}
+
+function getPlatformField()
+{
+    return [
+        [
+            'name' => 'platform',
+            'type' => 'text',
+            'required' => true,
+        ]
+    ];
+}
+
+function getMemTotalField()
+{
+    return [
+        [
+            'name' => 'mem_total',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getDiskTotalField()
+{
     return [
         [
             'name' => 'disk_total',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'disk_used',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'disk_available',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'disk_usage',
-            'type' => 'text',
-            'required' => false,
+            'type' => 'number',
+            'required' => true,
         ]
     ];
 }
 
-function getSwapFields() {
+function getSwapTotalField()
+{
     return [
         [
             'name' => 'swap_total',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'swap_used',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'swap_free',
-            'type' => 'text',
-            'required' => false,
-        ],
-        [
-            'name' => 'swap_usage',
-            'type' => 'text',
-            'required' => false,
+            'type' => 'number',
+            'required' => true,
         ]
     ];
 }
 
-function getNetworkInfoField() {
+function getArchField()
+{
     return [
         [
-            'name' => 'network_info',
-            'type' => 'json',
-            'required' => false,
+            'name' => 'arch',
+            'type' => 'text',
+            'required' => true,
         ]
     ];
 }
 
-function getProcessListField() {
+function getBootTimeField()
+{
     return [
         [
-            'name' => 'process_list',
-            'type' => 'json',
-            'required' => false,
+            'name' => 'boot_time',
+            'type' => 'number',
+            'required' => true,
         ]
     ];
 }
 
-function getUptimeField() {
+function getDescriptionField()
+{
+    return [
+        [
+            'name' => 'description',
+            'type' => 'text',
+            'required' => true,
+        ]
+    ];
+}
+
+function getHostIdField()
+{
+    return [
+        [
+            'name' => 'host_id',
+            'type' => 'relation',
+            'maxSelect' => 1,
+            'collectionId' => 'pbc_host',
+            'cascadeDelete' => true,
+            'required' => true,
+        ]
+    ];
+}
+
+function getCpuUsageField()
+{
+    return [
+        [
+            'name' => 'cpu_usage',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getMemUsedField()
+{
+    return [
+        [
+            'name' => 'mem_used',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getDiskUsedField()
+{
+    return [
+        [
+            'name' => 'disk_used',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getNetInTransferField()
+{
+    return [
+        [
+            'name' => 'net_in_transfer',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getNetOutTransferField()
+{
+    return [
+        [
+            'name' => 'net_out_transfer',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getNetInSpeedField()
+{
+    return [
+        [
+            'name' => 'net_in_speed',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getNetOutSpeedField()
+{
+    return [
+        [
+            'name' => 'net_out_speed',
+            'type' => 'number',
+            'required' => true,
+        ]
+    ];
+}
+
+function getUptimeField()
+{
     return [
         [
             'name' => 'uptime',
-            'type' => 'text',
-            'required' => false,
+            'type' => 'number',
+            'required' => true,
         ]
     ];
 }
 
-function getLoadAverageField() {
-    return [
-        [
-            'name' => 'load_average',
-            'type' => 'json',
-            'required' => false,
-        ]
-    ];
-}
-
-function getNetworkSpeedField() {
-    return [
-        [
-            'name' => 'network_speed',
-            'type' => 'json',
-            'required' => false,
-        ]
-    ];
-}
-
-function getConnectedUsersField() {
-    return [
-        [
-            'name' => 'connected_users',
-            'type' => 'json',
-            'required' => false,
-        ]
-    ];
-}
-
-function getFirewallStatusField() {
-    return [
-        [
-            'name' => 'firewall_status',
-            'type' => 'text',
-            'required' => false,
-        ]
-    ];
-}
-
-function getRecentLogEntriesField() {
-    return [
-        [
-            'name' => 'recent_log_entries',
-            'type' => 'json',
-            'required' => false,
-        ]
-    ];
-}
-
-function getSecurityUpdatesField() {
-    return [
-        [
-            'name' => 'security_updates',
-            'type' => 'json',
-            'required' => false,
-        ]
-    ];
-}
-
-function getTemperatureField() {
-    return [
-        [
-            'name' => 'temperature',
-            'type' => 'text',
-            'required' => false,
-        ]
-    ];
-}
-
-function getTimestampFields() {
+function getTimestampFields()
+{
     return [
         [
             'name' => 'created',
