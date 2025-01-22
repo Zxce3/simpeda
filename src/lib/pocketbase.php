@@ -16,6 +16,11 @@ class PocketBaseClient
         return $this->post('/api/collections', $data);
     }
 
+    public function updateCollection($collectionIdOrName, $data)
+    {
+        return $this->patch("/api/collections/$collectionIdOrName", $data);
+    }
+
     private function request($method, $endpoint, $data = null)
     {
         $url = $this->baseUrl . $endpoint;
@@ -62,6 +67,11 @@ class PocketBaseClient
     public function put($endpoint, $data)
     {
         return $this->request('PUT', $endpoint, $data);
+    }
+
+    public function patch($endpoint, $data)
+    {
+        return $this->request('PATCH', $endpoint, $data);
     }
 
     public function delete($endpoint)
