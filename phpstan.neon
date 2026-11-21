@@ -1,0 +1,7 @@
+parameters:
+    level: 1
+    paths:
+        - src
+        - build.php
+    # src/ files are concatenated into one script by build.php, so symbols
+    # defined in one file are legitimately used from another.

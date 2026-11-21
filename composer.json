@@ -1,0 +1,31 @@
+{
+    "name": "zxce3/simpeda",
+    "description": "Single-file server dashboard (system information) with PocketBase auth",
+    "license": "MIT",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "ext-curl": "*"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1"
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "scripts": {
+        "lint": "git ls-files '*.php' | xargs -n1 php -l > /dev/null",
+        "analyse": "phpstan analyse --memory-limit=512M",
+        "build": "php build.php build",
+        "test": "tests/smoke.sh",
+        "check": ["@lint", "@analyse", "@build", "@test"]
+    },
+    "scripts-descriptions": {
+        "lint": "Syntax-check every PHP file",
+        "analyse": "Run PHPStan",
+        "build": "Build build/index.php",
+        "test": "Run the smoke tests against a stub PocketBase",
+        "check": "Run lint, analyse, build and test"
+    }
+}
