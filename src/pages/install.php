@@ -8,7 +8,7 @@ function page_install(array &$opt)
 
 function displayInstall()
 {
-
+    ob_start();
     ?>
         <h1>Install Pocketbase</h1>
         <form method="POST">
@@ -21,5 +21,6 @@ function displayInstall()
             <button type="submit">Install</button>
         </form>
     <?php
+    return ob_get_clean();
 }
 ?>

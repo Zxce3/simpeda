@@ -9,7 +9,7 @@ function page_dashboard(array &$opt)
 function displayDashboard()
 {
     if (!file_exists('pocketbase/pb_data')) {
-        displayInstall();
+        echo displayInstall();
         exit;
     }
     ob_start();

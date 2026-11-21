@@ -43,8 +43,8 @@ function web_router(string $uri): bool
 
 function load_body(string $content = "", array $opt = [])
 {
-    extract($opt);
-    echo generate_body($content, $title ?? '');
+    // A page may set 'content' to null (e.g. it echoes instead of returning), so fall back to the argument.
+    echo generate_body((string) ($opt['content'] ?? $content), (string) ($opt['title'] ?? ''));
 }
 
 function e(string $str): string
