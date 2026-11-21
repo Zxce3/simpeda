@@ -37,6 +37,23 @@ The dashboard is an HTML page that displays the system information in a user-fri
 
 You can toggle between light and dark themes using the "Toggle Theme" button. The selected theme is saved in the browser's local storage.
 
+## Development
+
+```bash
+php build.php build      # minify src/ into build/index.php
+php build.php serve 8000 # build, watch, and serve on http://localhost:8000
+git ls-files '*.php' | xargs -n1 php -l   # syntax check (what CI runs)
+```
+
+No dependencies to install: the project only needs PHP (CI tests 8.2 to 8.5).
+The app has no environment variables; the PocketBase URL is a constant in `src/lib/auth.php`.
+
+## CI and releases
+
+- `.github/workflows/ci.yml` lints on PHP 8.2 to 8.5, builds, and smoke-tests on every push to `master` and every PR.
+- Pushing a `v*` tag builds `build/index.php` and creates a draft GitHub release.
+- Actions are pinned by commit SHA and kept current by Dependabot (`.github/dependabot.yml`).
+
 ## File Structure
 
 - `index.php`: Main file containing the PHP code to retrieve system information and the HTML/CSS/JavaScript for the dashboard.
