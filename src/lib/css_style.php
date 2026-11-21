@@ -105,7 +105,7 @@ function getCssStyle()
         label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }
         label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--text); margin: 10px 0; }
         label.check input { width: auto; }
-        .search { max-width: 240px; }
+        .toolbar .search { width: 240px; flex: 0 1 240px; }
         .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
         .seg button { border: 0; border-radius: 0; background: transparent; padding: 6px 12px; }
         .seg button.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
@@ -223,7 +223,7 @@ function getCssStyle()
             main { padding: 14px 12px 40px; }
             .grid { grid-template-columns: 1fr; }
             .charts { grid-template-columns: 1fr; }
-            .search { max-width: none; flex: 1; }
+            .toolbar .search { width: auto; flex: 1 1 100%; }
             .stat .value { font-size: 18px; }
             th, td { padding: 8px 8px; }
         }
