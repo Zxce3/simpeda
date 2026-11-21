@@ -1,15 +1,43 @@
 <?php
 class Auth
 {
-    const POCKETBASE_URL = 'http://127.0.0.1:8090';
+    const DEFAULT_POCKETBASE_URL = 'http://127.0.0.1:8090';
+    const VERIFY_INTERVAL = 300;
     const TOKEN_COOKIE = 'auth_token';
     const REFRESH_INTERVAL = 3600; 
     const MAX_TOKEN_AGE = 30 * 24 * 60 * 60; 
 
+    public static function pocketbaseUrl()
+    {
+        return getenv('SIMPEDA_POCKETBASE_URL') ?: self::DEFAULT_POCKETBASE_URL;
+    }
+
+    // Decodes the JWT payload only. This does NOT verify the signature; use verifyToken().
     private static function decodeToken($token)
     {
-        
-        return json_decode(base64_decode(str_replace('_', '/', str_replace('-', '+', explode('.', $token)[1]))), true);
+        $parts = is_string($token) ? explode('.', $token) : [];
+        if (count($parts) !== 3) {
+            return null;
+        }
+        $decoded = base64_decode(strtr($parts[1], '-_', '+/'));
+        $payload = $decoded === false ? null : json_decode($decoded, true);
+        return is_array($payload) ? $payload : null;
+    }
+
+    // Asks PocketBase to validate the token (signature and expiry) by refreshing it.
+    public static function verifyToken($token)
+    {
+        $decoded = self::decodeToken($token);
+        if (!$decoded || ($decoded['exp'] ?? 0) < time()) {
+            return false;
+        }
+        try {
+            $client = new PocketBaseClient(self::pocketbaseUrl(), $token);
+            $response = $client->post('/api/collections/_superusers/auth-refresh', ['token' => $token]);
+        } catch (Exception $e) {
+            return false;
+        }
+        return isset($response['token']);
     }
 
     public static function refreshToken()
@@ -18,7 +46,7 @@ class Auth
         $token = $_SESSION['auth_token'] ?? $_COOKIE[self::TOKEN_COOKIE] ?? null;
 
         if ($token) {
-            $client = new PocketBaseClient(self::POCKETBASE_URL, $token);
+            $client = new PocketBaseClient(self::pocketbaseUrl(), $token);
             $response = $client->post("/api/collections/_superusers/auth-refresh", ['token' => $token]);
             if (isset($response['token'])) {
                 self::setAuthCookie($response['token'], true);
@@ -44,6 +72,7 @@ class Auth
         ]);
         $_SESSION['auth_token'] = $token;
         $_SESSION['token_expiry'] = $decoded['exp'] ?? 0;
+        $_SESSION['auth_verified_at'] = time();
 
         return true;
     }
@@ -96,7 +125,7 @@ class Auth
 
     public static function authenticateUser($email, $password)
     {
-        $client = new PocketBaseClient(self::POCKETBASE_URL);
+        $client = new PocketBaseClient(self::pocketbaseUrl());
         $response = $client->post("/api/collections/_superusers/auth-with-password", [
             'identity' => $email,
             'password' => $password
@@ -117,8 +146,8 @@ function handleLogin()
             exit;
         }
 
-        $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
-        $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
+        $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
+        $password = (string) ($_POST['password'] ?? '');
         $remember = isset($_POST['remember']);
 
         $token = Auth::authenticateUser($email, $password);
@@ -137,18 +166,25 @@ function handleLogin()
 
 function isUserAuthenticated()
 {
-    if (isset($_SESSION['auth_token']) && Auth::checkAuth()) {
+    $now = time();
+
+    // Session already holds a token that PocketBase verified recently.
+    if (isset($_SESSION['auth_token'], $_SESSION['auth_verified_at']) && Auth::checkAuth()
+        && $now - $_SESSION['auth_verified_at'] < Auth::VERIFY_INTERVAL) {
         return true;
     }
 
-    
-    if (isset($_COOKIE[Auth::TOKEN_COOKIE])) {
-        $token = $_COOKIE[Auth::TOKEN_COOKIE];
-        if (Auth::setAuthCookie($token, true)) {
-            return true;
-        }
+    // Never trust a token (cookie or stale session) without asking PocketBase to verify it.
+    $token = $_SESSION['auth_token'] ?? $_COOKIE[Auth::TOKEN_COOKIE] ?? null;
+    if ($token && Auth::verifyToken($token)) {
+        $decoded = json_decode(base64_decode(strtr(explode('.', $token)[1], '-_', '+/')), true);
+        $_SESSION['auth_token'] = $token;
+        $_SESSION['token_expiry'] = $decoded['exp'] ?? 0;
+        $_SESSION['auth_verified_at'] = $now;
+        return true;
     }
 
+    unset($_SESSION['auth_token'], $_SESSION['token_expiry'], $_SESSION['auth_verified_at']);
     return false;
 }
 

@@ -45,6 +45,10 @@ function handleGetRequests($path, $query)
 {
     if (isset($_GET['api'])) {
         header('Content-Type: application/json');
+        if (!isUserAuthenticated()) {
+            sendResponse(['error' => 'Unauthorized'], 401);
+            exit;
+        }
         echo json_encode([
             'basic' => SystemInformation::getBasicInfo(),
             'cpu' => SystemInformation::getCPUInfo(),
@@ -94,14 +98,7 @@ function handleGetRequests($path, $query)
     }
 
     if (!isPocketbaseInstalled()) {
-        if (isset($_GET['email']) && isset($_GET['password'])) {
-            $email = filter_var($_GET['email'], FILTER_SANITIZE_EMAIL);
-            $password = htmlspecialchars($_GET['password'], ENT_QUOTES, 'UTF-8');
-            installPocketbase($email, $password);
-            redirect('/login');
-        } else {
-            web_router('install');
-        }
+        web_router('install');
         return;
     }
 
@@ -123,22 +120,25 @@ function handleGetRequests($path, $query)
     }
 }
 
-function displayInstallForm()
-{
-    echo getCssStyle();
-    echo '<form method="GET" action="/"><label for="email">Email:</label><input type="email" id="email" name="email" required><label for="password">Password:</label><input type="password" id="password" name="password" required><button type="submit">Install Pocketbase</button></form>';
-}
-
 function handlePostRequests($path)
 {
     if ($path === '/install') {
-        $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
-        $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
+        // Without this guard anyone could create a new superuser on an installed instance.
+        if (isPocketbaseInstalled()) {
+            sendResponse(['error' => 'Already installed'], 409);
+            return;
+        }
+        $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
+        $password = (string) ($_POST['password'] ?? '');
+        if ($email === '' || $password === '') {
+            sendResponse(['error' => 'A valid email and a password are required'], 400);
+            return;
+        }
         installPocketbase($email, $password);
         sendResponse(['message' => 'Installation successful'], 200);
     } elseif ($path === '/login') {
-        $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
-        $password = htmlspecialchars($_POST['password'] ?? '', ENT_QUOTES, 'UTF-8');
+        $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
+        $password = (string) ($_POST['password'] ?? '');
         $remember = isset($_POST['remember']);
 
         $token = Auth::authenticateUser($email, $password);
@@ -237,6 +237,21 @@ function findAvailablePort($startPort = DEFAULT_PORT, $maxPort = MAX_PORT)
     return false;
 }
 
+function verifyPocketbaseChecksum($filename, $version)
+{
+    $sums = @file_get_contents("https://github.com/pocketbase/pocketbase/releases/download/v{$version}/checksums.txt");
+    if (!$sums) {
+        return false;
+    }
+    foreach (explode("\n", $sums) as $line) {
+        $parts = preg_split('/\s+/', trim($line));
+        if (count($parts) === 2 && $parts[1] === $filename) {
+            return hash_equals(strtolower($parts[0]), hash_file('sha256', $filename));
+        }
+    }
+    return false;
+}
+
 function installPocketbase($email, $password)
 {
     $arch = getSystemArch();
@@ -248,6 +263,10 @@ function installPocketbase($email, $password)
     $downloaded = file_put_contents($filename, file_get_contents($url));
     if (!$downloaded) {
         sendResponse(['error' => 'Failed to download Pocketbase'], 500);
+    }
+    if (!verifyPocketbaseChecksum($filename, $version)) {
+        unlink($filename);
+        sendResponse(['error' => 'Pocketbase checksum verification failed'], 500);
     }
 
     $unzipCommand = sprintf('unzip -o %s -d %s', escapeshellarg($filename), escapeshellarg(POCKETBASE_PATH));
@@ -281,7 +300,7 @@ function installPocketbase($email, $password)
         sendResponse(['error' => 'Failed to create superuser'], 500);
     }
 
-    $client = new PocketBaseClient('http://127.0.0.1:' . DEFAULT_PORT);
+    $client = new PocketBaseClient(Auth::pocketbaseUrl());
     $client->authWithPassword($email, $password);
     createSystemInformationSchema($client, $email, $password);
 
