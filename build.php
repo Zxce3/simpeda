@@ -195,6 +195,15 @@ class Builder
         register_shutdown_function(static function () use ($server) {
             proc_terminate($server);
         });
+        if (function_exists('pcntl_signal')) {
+            // Exit normally on Ctrl+C / kill so the shutdown function stops the server.
+            pcntl_async_signals(true);
+            foreach ([SIGINT, SIGTERM, SIGHUP] as $signal) {
+                pcntl_signal($signal, static function () {
+                    exit(0);
+                });
+            }
+        }
         echo "Starting server at http://localhost:$port\n";
         $this->watch();
         return true;
