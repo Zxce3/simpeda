@@ -2,7 +2,7 @@
 class Auth
 {
     const DEFAULT_POCKETBASE_URL = 'http://127.0.0.1:8090';
-    const VERIFY_INTERVAL = 300;
+    const DEFAULT_VERIFY_INTERVAL = 300;
     const TOKEN_COOKIE = 'auth_token';
     const REFRESH_INTERVAL = 3600; 
     const MAX_TOKEN_AGE = 30 * 24 * 60 * 60; 
@@ -10,6 +10,13 @@ class Auth
     public static function pocketbaseUrl()
     {
         return getenv('SIMPEDA_POCKETBASE_URL') ?: self::DEFAULT_POCKETBASE_URL;
+    }
+
+    // Seconds a PocketBase-verified token is trusted before it is verified again.
+    public static function verifyInterval()
+    {
+        $value = getenv('SIMPEDA_VERIFY_INTERVAL');
+        return $value !== false && ctype_digit($value) ? (int) $value : self::DEFAULT_VERIFY_INTERVAL;
     }
 
     // Decodes the JWT payload only. This does NOT verify the signature; use verifyToken().
@@ -136,31 +143,18 @@ class Auth
     
 }
 
-function handleLogin()
+function csrfToken()
 {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (isset($_GET['logout'])) {
-            Auth::logout();
-            header('Location: login');
-            exit;
-        }
-
-        $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
-        $password = (string) ($_POST['password'] ?? '');
-        $remember = isset($_POST['remember']);
-
-        $token = Auth::authenticateUser($email, $password);
-        if ($token) {
-            Auth::setAuthCookie($token, $remember);
-            session_regenerate_id(true);  
-            header('Location: /dashboard');
-            exit;
-        } else {
-            displayLoginForm('Invalid email or password.');
-        }
-    } else {
-        displayLoginForm('');
+    if (empty($_SESSION['csrf'])) {
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
     }
+    return $_SESSION['csrf'];
+}
+
+function csrfValid()
+{
+    $token = $_POST['csrf'] ?? '';
+    return is_string($token) && !empty($_SESSION['csrf']) && hash_equals($_SESSION['csrf'], $token);
 }
 
 function isUserAuthenticated()
@@ -169,7 +163,7 @@ function isUserAuthenticated()
 
     // Session already holds a token that PocketBase verified recently.
     if (isset($_SESSION['auth_token'], $_SESSION['auth_verified_at']) && Auth::checkAuth()
-        && $now - $_SESSION['auth_verified_at'] < Auth::VERIFY_INTERVAL) {
+        && $now - $_SESSION['auth_verified_at'] < Auth::verifyInterval()) {
         return true;
     }
 
@@ -187,5 +181,4 @@ function isUserAuthenticated()
     return false;
 }
 
-handleLogin();
 ?>

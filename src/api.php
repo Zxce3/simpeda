@@ -116,6 +116,10 @@ function handleGetRequests($path, $query)
         return;
     }
 
+    if (trim($path, '/') === 'dashboard' && !isUserAuthenticated()) {
+        redirect('/login');
+    }
+
     if (!web_router(ltrim($path, '/'))) {
         displayErrorPage();
     }
@@ -123,23 +127,37 @@ function handleGetRequests($path, $query)
 
 function handlePostRequests($path)
 {
+    if (isset($_GET['logout'])) {
+        if (csrfValid()) {
+            Auth::logout();
+        }
+        redirect('/login');
+    }
+
     if ($path === '/install') {
         // The first superuser is created from the command line (as the PocketBase docs describe),
         // never through an unauthenticated web form.
         sendResponse(['error' => 'Web installation is disabled. Run: php index.php install'], 403);
     } elseif ($path === '/login') {
+        if (!csrfValid()) {
+            $GLOBALS['simpeda_login_error'] = 'Your session expired. Please try again.';
+            http_response_code(400);
+            web_router('login');
+            return;
+        }
         $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
         $password = (string) ($_POST['password'] ?? '');
         $remember = isset($_POST['remember']);
 
         $token = Auth::authenticateUser($email, $password);
-        if ($token) {
-            Auth::setAuthCookie($token, $remember);
+        if ($token && Auth::setAuthCookie($token, $remember)) {
             session_regenerate_id(true);
-            sendResponse(['message' => 'Login successful'], 200);
-        } else {
-            sendResponse(['message' => 'Invalid email or password'], 401);
+            unset($_SESSION['csrf']);
+            redirect('/dashboard');
         }
+        $GLOBALS['simpeda_login_error'] = 'Invalid email or password.';
+        http_response_code(401);
+        web_router('login');
     } else {
         sendResponse(['message' => 'Invalid POST request'], 404);
     }

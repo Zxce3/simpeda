@@ -35,6 +35,7 @@ function web_router(string $uri): bool
         return true;
     }
 
+    http_response_code(404);
     $opt = [];
     page_404($opt);
     load_body($opt['content'] ?? '', $opt);

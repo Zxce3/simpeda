@@ -9,6 +9,7 @@ function displayHeader()
         <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
         <?php if (isUserAuthenticated()): ?>
             <form method="POST" action="?logout" style="display:inline;">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrfToken()) ?>">
                 <button type="submit">Logout</button>
             </form>
         <?php else: ?>
