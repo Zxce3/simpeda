@@ -124,19 +124,9 @@ function handleGetRequests($path, $query)
 function handlePostRequests($path)
 {
     if ($path === '/install') {
-        // Without this guard anyone could create a new superuser on an installed instance.
-        if (isPocketbaseInstalled()) {
-            sendResponse(['error' => 'Already installed'], 409);
-            return;
-        }
-        $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
-        $password = (string) ($_POST['password'] ?? '');
-        if ($email === '' || strlen($password) < 8) {
-            sendResponse(['error' => 'A valid email and a password of at least 8 characters are required'], 400);
-            return;
-        }
-        installPocketbase($email, $password);
-        sendResponse(['message' => 'Installation successful'], 200);
+        // The first superuser is created from the command line (as the PocketBase docs describe),
+        // never through an unauthenticated web form.
+        sendResponse(['error' => 'Web installation is disabled. Run: php index.php install'], 403);
     } elseif ($path === '/login') {
         $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
         $password = (string) ($_POST['password'] ?? '');
@@ -263,18 +253,18 @@ function installPocketbase($email, $password)
 
     $downloaded = file_put_contents($filename, file_get_contents($url));
     if (!$downloaded) {
-        sendResponse(['error' => 'Failed to download Pocketbase'], 500);
+        throw new RuntimeException('Failed to download Pocketbase');
     }
     if (!verifyPocketbaseChecksum($filename, $version)) {
         unlink($filename);
-        sendResponse(['error' => 'Pocketbase checksum verification failed'], 500);
+        throw new RuntimeException('Pocketbase checksum verification failed');
     }
 
     $unzipCommand = sprintf('unzip -o %s -d %s', escapeshellarg($filename), escapeshellarg(POCKETBASE_PATH));
     exec($unzipCommand, $output, $return_var);
     if ($return_var !== 0) {
         unlink($filename);
-        sendResponse(['error' => 'Failed to extract Pocketbase'], 500);
+        throw new RuntimeException('Failed to extract Pocketbase');
     }
     unlink($filename);
 
@@ -290,7 +280,7 @@ function installPocketbase($email, $password)
 
     if (!isPocketbaseRunning()) {
         error_log('Failed to start Pocketbase during installation');
-        sendResponse(['error' => 'Failed to start Pocketbase during installation'], 500);
+        throw new RuntimeException('Failed to start Pocketbase during installation');
     }
 
     // escapeshellcmd() on top of escapeshellarg() mangled special characters in the password.
@@ -302,7 +292,7 @@ function installPocketbase($email, $password)
     );
     exec($command, $output, $return_var);
     if ($return_var !== 0) {
-        sendResponse(['error' => 'Failed to create superuser'], 500);
+        throw new RuntimeException('Failed to create superuser');
     }
 
     $client = new PocketBaseClient(Auth::pocketbaseUrl());
@@ -338,6 +328,83 @@ function sendResponse($data, $status = 200)
 }
 
 
+function promptLine($prompt)
+{
+    if (stream_isatty(STDIN)) {
+        fwrite(STDERR, $prompt);
+    }
+    $line = fgets(STDIN);
+    return $line === false ? '' : rtrim($line, "\r\n");
+}
+
+function promptPassword($prompt)
+{
+    $tty = stream_isatty(STDIN) && DIRECTORY_SEPARATOR === '/';
+    if ($tty) {
+        shell_exec('stty -echo');
+        register_shutdown_function(static function () {
+            shell_exec('stty echo');
+        });
+    }
+    $password = promptLine($prompt);
+    if ($tty) {
+        shell_exec('stty echo');
+        fwrite(STDERR, "\n");
+    }
+    return $password;
+}
+
+// Command line entry point: php index.php install [--email=EMAIL]
+// The password is read from the terminal (hidden) or from stdin when piped.
+function runCli(array $argv)
+{
+    $command = $argv[1] ?? 'help';
+    if ($command !== 'install') {
+        fwrite(STDERR, "Usage: php index.php install [--email=EMAIL]\n");
+        return $command === 'help' ? 0 : 1;
+    }
+
+    chdir(__DIR__);
+    if (isPocketbaseInstalled()) {
+        fwrite(STDERR, "PocketBase is already installed (" . POCKETBASE_DATA_PATH . " exists).\n");
+        return 1;
+    }
+
+    $email = null;
+    foreach ($argv as $arg) {
+        if (strncmp($arg, '--email=', 8) === 0) {
+            $email = substr($arg, 8);
+        }
+    }
+    $email = $email ?? promptLine('Superuser email: ');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        fwrite(STDERR, "A valid email is required.\n");
+        return 1;
+    }
+
+    $password = promptPassword('Password (min 8 characters): ');
+    if (stream_isatty(STDIN) && promptPassword('Repeat password: ') !== $password) {
+        fwrite(STDERR, "Passwords do not match.\n");
+        return 1;
+    }
+    if (strlen($password) < 8) {
+        fwrite(STDERR, "The password must be at least 8 characters.\n");
+        return 1;
+    }
+
+    try {
+        installPocketbase($email, $password);
+    } catch (Throwable $e) {
+        fwrite(STDERR, 'Install failed: ' . $e->getMessage() . "\n");
+        return 1;
+    }
+    echo "PocketBase " . POCKETBASE_VERSION . " installed. Log in to the dashboard as $email.\n";
+    return 0;
+}
+
+if (PHP_SAPI === 'cli') {
+    exit(runCli($argv ?? []));
+}
 handleRequest();
 
 ?>

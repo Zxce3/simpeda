@@ -10,16 +10,10 @@ function displayInstall()
 {
     ob_start();
     ?>
-        <h1>Install Pocketbase</h1>
-        <form method="POST">
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" required>
-            <br>
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-            <br>
-            <button type="submit">Install</button>
-        </form>
+        <h1>Set up SIMPEDA</h1>
+        <p>PocketBase is not installed yet. Create the first superuser from the command line on the server:</p>
+        <pre><code>php index.php install</code></pre>
+        <p>You will be asked for an email and a password (hidden). Reload this page when it finishes.</p>
     <?php
     return ob_get_clean();
 }

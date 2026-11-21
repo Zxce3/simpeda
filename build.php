@@ -131,7 +131,7 @@ class Builder
         // No timestamp: the same sources always produce the same file.
         $header = "<?php /* simpeda {$this->version()} */ "
             . "session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict', 'secure' => !empty(\$_SERVER['HTTPS'])]); "
-            . "session_start(); ?>\n";
+            . "if (PHP_SAPI !== 'cli') { session_start(); } ?>\n";
         $output = $header . $output;
 
         // A PHP close tag implies a semicolon, so join each close/open tag pair with an explicit one.
