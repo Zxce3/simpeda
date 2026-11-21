@@ -55,7 +55,7 @@ class SystemInformation
             'Total' => self::formatBytes($total),
             'Used' => self::formatBytes($used),
             'Available' => self::formatBytes($available),
-            'Usage' => round(($used / $total) * 100, 2) . '%'
+            'Usage' => ($total > 0 ? round(($used / $total) * 100, 2) : 0) . '%'
         ];
     }
 

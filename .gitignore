@@ -1,2 +1,8 @@
 build/
 pocketbase/
+.env
+.env.*
+!.env.example
+vendor/
+release/
+.DS_Store
