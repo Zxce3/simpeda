@@ -46,6 +46,8 @@ composer lint | analyse | build | test   # or run each step alone
 php build.php serve 8000    # build, watch, and serve on http://localhost:8000
 ```
 
+`composer test:e2e` (`tests/e2e.sh`) goes further: it runs the app's installer, which downloads the pinned PocketBase release, then checks the schema, login and API against the real thing. It needs network access and is not run in CI.
+
 Without Composer you can still build with `php build.php build`.
 
 `tests/smoke.sh` builds the app and runs it against a stub PocketBase (`tests/stub_pocketbase.php`, port 8090), so no real PocketBase is needed. It checks that the API is closed to anonymous and forged-cookie requests, that reinstalling is refused and that login works.

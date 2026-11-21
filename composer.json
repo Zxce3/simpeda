@@ -19,6 +19,7 @@
         "analyse": "phpstan analyse --memory-limit=512M",
         "build": "php build.php build",
         "test": "tests/smoke.sh",
+        "test:e2e": "tests/e2e.sh",
         "check": ["@lint", "@analyse", "@build", "@test"]
     },
     "scripts-descriptions": {
@@ -26,6 +27,7 @@
         "analyse": "Run PHPStan",
         "build": "Build build/index.php",
         "test": "Run the smoke tests against a stub PocketBase",
+        "test:e2e": "Install and test against a real PocketBase (needs network)",
         "check": "Run lint, analyse, build and test"
     }
 }
