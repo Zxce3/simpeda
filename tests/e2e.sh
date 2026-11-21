@@ -59,15 +59,25 @@ check "web reinstall is refused" 403 "$(code -d "email=evil@example.com&password
 check "api without auth is rejected" 401 "$(code "$app/?api=1")"
 check "dashboard without auth redirects" 302 "$(code "$app/?dashboard")"
 
-login=$(curl -s -i --data-urlencode "email=$email" --data-urlencode "password=$password" "$app/?login")
-cookie=$(printf '%s' "$login" | tr -d '\r' | sed -n 's/^Set-Cookie: auth_token=\([^;]*\).*/\1/p' | head -1)
-check "login sets auth cookie" yes "$([ -n "$cookie" ] && echo yes || echo no)"
-check "wrong password gets no cookie" no "$(curl -s -i -d "email=$email&password=wrongpass1" "$app/?login" | grep -q '^Set-Cookie: auth_token=[^;]' && echo yes || echo no)"
+jar="$work/jar"
+csrf=$(curl -s -c "$jar" -b "$jar" "$app/login" | sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' | head -1)
+check "login with the real password succeeds" 302 "$(code -b "$jar" -c "$jar" --data-urlencode "csrf=$csrf" --data-urlencode "email=$email" --data-urlencode "password=$password" "$app/login")"
+csrf=$(curl -s -c "$work/bad" -b "$work/bad" "$app/login" | sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' | head -1)
+check "wrong password is rejected" 401 "$(code -b "$work/bad" -c "$work/bad" --data-urlencode "csrf=$csrf" --data-urlencode "email=$email" --data-urlencode "password=wrongpass1" "$app/login")"
 
-api=$(curl -s -H "Cookie: auth_token=$cookie" "$app/?api=1")
+api=$(curl -s -b "$jar" "$app/?api=1")
 check "api returns system info when logged in" yes "$(printf '%s' "$api" | json 'isset($j["cpu"], $j["memory"], $j["processes"]) ? "yes" : "no"')"
-check "dashboard renders when logged in" 200 "$(code -H "Cookie: auth_token=$cookie" "$app/?dashboard")"
+check "dashboard renders when logged in" 200 "$(code -b "$jar" "$app/dashboard")"
+check "dashboard redirects when logged out" 302 "$(code "$app/dashboard")"
 check "forged cookie is rejected" 401 "$(code -H 'Cookie: auth_token=a.eyJleHAiOjk5OTk5OTk5OTl9.b' "$app/?api=1")"
+
+# PocketBase is stopped: the app must restart it on demand.
+for pid in $(pgrep -x pocketbase); do [ "$(readlink "/proc/$pid/cwd" 2>/dev/null)" = "$work" ] && kill "$pid"; done
+sleep 1
+check "status endpoint restarts PocketBase" 202 "$(code "$app/?status")"
+sleep 6
+check "PocketBase is healthy again" 200 "$(code "$pb/api/health")"
+check "status reports running" 200 "$(code "$app/?status")"
 
 [ $fail -eq 0 ] && echo "e2e tests passed" || { echo "e2e tests FAILED"; tail -15 "$work/app.log"; }
 exit $fail

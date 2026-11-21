@@ -15,7 +15,8 @@ if ($path === '/api/health') {
         ? out(['token' => jwt('valid-signature')])
         : out(['message' => 'Failed to authenticate.'], 400);
 } elseif ($path === '/api/collections/_superusers/auth-refresh') {
-    substr($auth, -15) === 'valid-signature' ? out(['token' => jwt('valid-signature')]) : out(['message' => 'Unauthorized'], 401);
+    $revoked = ($f = getenv('STUB_REVOKED_FILE')) && file_exists($f);
+    !$revoked && substr($auth, -15) === 'valid-signature' ? out(['token' => jwt('valid-signature')]) : out(['message' => 'Unauthorized'], 401);
 } else {
     out(['message' => 'Not found'], 404);
 }
