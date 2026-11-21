@@ -36,6 +36,7 @@ class Builder
     {
         $out = '';
         $inString = false;
+        $inPhp = false;
         foreach (token_get_all($content) as $token) {
             if (!is_array($token)) {
                 if ($token === '"') {
@@ -53,9 +54,11 @@ class Builder
             }
             switch ($id) {
                 case T_OPEN_TAG:
+                    $inPhp = true;
                     $out .= '<?php ';
                     break;
                 case T_CLOSE_TAG:
+                    $inPhp = false;
                     $out = rtrim($out, ' ') . '?>';
                     break;
                 case T_COMMENT:
@@ -81,7 +84,8 @@ class Builder
                     $out .= $text;
             }
         }
-        return trim($out);
+        // Files may omit the closing tag; add one so the next file can be joined safely.
+        return trim($out) . ($inPhp ? ' ?>' : '');
     }
 
     private function minifyCSS(string $content): string
@@ -129,7 +133,7 @@ class Builder
         }
 
         // No timestamp: the same sources always produce the same file.
-        $header = "<?php /* simpeda {$this->version()} */ "
+        $header = "<?php /* simpeda {$this->version()} */ define('SIMPEDA_VERSION', " . var_export($this->version(), true) . "); "
             . "session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict', 'secure' => !empty(\$_SERVER['HTTPS'])]); "
             . "if (PHP_SAPI !== 'cli') { session_start(); } ?>\n";
         $output = $header . $output;
