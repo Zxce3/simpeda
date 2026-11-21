@@ -27,153 +27,125 @@ class Builder
         $this->outputFile = $outputFile;
     }
 
+    /**
+     * Conservative minifier. PHP is tokenized (so strings and heredocs are never touched),
+     * and inline HTML/JS/CSS only loses comments and redundant whitespace while keeping
+     * line breaks, so `//` comments in JS can never swallow code.
+     */
     private function minifyContent(string $content): string
     {
-        $phpBlocks = [];
-        $content = preg_replace_callback('/(<\?php.*?\?>)/s', function ($matches) use (&$phpBlocks) {
-            $placeholder = '___PHP_BLOCK_' . count($phpBlocks) . '___';
-            $phpBlocks[$placeholder] = $matches[1];
-            return $placeholder;
-        }, $content);
-
-        $jsBlocks = [];
-        $content = preg_replace_callback('/(<script[^>]*>.*?<\/script>)/is', function ($matches) use (&$jsBlocks) {
-            $placeholder = '___JS_BLOCK_' . count($jsBlocks) . '___';
-            $jsBlocks[$placeholder] = $matches[1];
-            return $placeholder;
-        }, $content);
-
-        $cssBlocks = [];
-        $content = preg_replace_callback('/(<style[^>]*>.*?<\/style>)/is', function ($matches) use (&$cssBlocks) {
-            $placeholder = '___CSS_BLOCK_' . count($cssBlocks) . '___';
-            $cssBlocks[$placeholder] = $matches[1];
-            return $placeholder;
-        }, $content);
-
-        $content = $this->minifyHTML($content);
-
-        foreach ($phpBlocks as $placeholder => $code) {
-            $code = $this->minifyPHP($code);
-            $content = str_replace($placeholder, $code, $content);
+        $out = '';
+        $inString = false;
+        foreach (token_get_all($content) as $token) {
+            if (!is_array($token)) {
+                if ($token === '"') {
+                    $inString = !$inString;
+                } elseif (!$inString && strpos(';{},()', $token) !== false && substr($out, -6) !== '<?php ') {
+                    $out = rtrim($out, ' ');
+                }
+                $out .= $token;
+                continue;
+            }
+            [$id, $text] = $token;
+            if ($inString && $id !== T_END_HEREDOC) {
+                $out .= $text;
+                continue;
+            }
+            switch ($id) {
+                case T_OPEN_TAG:
+                    $out .= '<?php ';
+                    break;
+                case T_CLOSE_TAG:
+                    $out = rtrim($out, ' ') . '?>';
+                    break;
+                case T_COMMENT:
+                case T_DOC_COMMENT:
+                    break;
+                case T_WHITESPACE:
+                    if ($out !== '' && !in_array(substr($out, -1), [' ', ';', '{', '}', ',', '('], true)) {
+                        $out .= ' ';
+                    }
+                    break;
+                case T_INLINE_HTML:
+                    $out .= $this->minifyHTML($text);
+                    break;
+                case T_START_HEREDOC:
+                    $inString = true;
+                    $out .= $text;
+                    break;
+                case T_END_HEREDOC:
+                    $inString = false;
+                    $out .= $text;
+                    break;
+                default:
+                    $out .= $text;
+            }
         }
-
-        foreach ($jsBlocks as $placeholder => $code) {
-            $code = $this->minifyJS($code);
-            $content = str_replace($placeholder, $code, $content);
-        }
-
-        foreach ($cssBlocks as $placeholder => $code) {
-            $code = $this->minifyCSS($code);
-            $content = str_replace($placeholder, $code, $content);
-        }
-
-        return $content;
-    }
-
-    private function minifyPHP(string $content): string
-    {
-        // Preserve strings
-        $strings = [];
-        $content = preg_replace_callback('/([\'"])(?:\\\\.|(?!\1).)*\1/s', function ($matches) use (&$strings) {
-            $placeholder = '___STRING_' . count($strings) . '___';
-            $strings[$placeholder] = $matches[0];
-            return $placeholder;
-        }, $content);
-
-        $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-        $content = preg_replace('/(?<!:)\/\/.*$/m', '', $content);
-        $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{},()])\s*/', '$1', $content);
-        $content = preg_replace('/<\?php\s*/', '<?php ', $content);
-        $content = preg_replace('/([^}])}/', '$1 }', $content);
-
-        // Restore strings
-        foreach ($strings as $placeholder => $string) {
-            $content = str_replace($placeholder, $string, $content);
-        }
-
-        return trim($content);
-    }
-
-    private function minifyJS(string $content): string
-    {
-        $strings = [];
-        $content = preg_replace_callback('/([\'"])(?:\\\\.|(?!\1).)*\1/s', function ($matches) use (&$strings) {
-            $placeholder = '___STRING_' . count($strings) . '___';
-            $strings[$placeholder] = $matches[0];
-            return $placeholder;
-        }, $content);
-
-        $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
-        $content = preg_replace('/(?<!:)\/\/.*$/m', '', $content);
-        $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{}(),])\s*/', '$1', $content);
-
-        foreach ($strings as $placeholder => $string) {
-            $content = str_replace($placeholder, $string, $content);
-        }
-
-        return trim($content);
+        return trim($out);
     }
 
     private function minifyCSS(string $content): string
     {
         $content = preg_replace('/\/\*[\s\S]*?\*\//', '', $content);
         $content = preg_replace('/\s+/s', ' ', $content);
-        $content = preg_replace('/\s*([;{}(),:])\s*/', '$1', $content);
-
-        return trim($content);
+        return trim(preg_replace('/\s*([;{}(),:])\s*/', '$1', $content));
     }
 
     private function minifyHTML(string $content): string
     {
         $content = preg_replace('/<!--(?!\[if).*?-->/s', '', $content);
-        $content = preg_replace('/>\s+</s', '><', $content);
-        $content = preg_replace('/\s+/', ' ', $content);
-        return trim($content);
+        $content = preg_replace_callback('/(<style[^>]*>)(.*?)(<\/style>)/is', function ($m) {
+            return $m[1] . $this->minifyCSS($m[2]) . $m[3];
+        }, $content);
+        // Collapse indentation and blank lines but keep one line break (safe for inline JS).
+        return preg_replace('/[ \t]*\R\s*/', "\n", $content);
     }
 
-    public function build(): void
+    private function version(): string
+    {
+        $version = getenv('SIMPEDA_VERSION');
+        if (!$version) {
+            $version = trim((string) @shell_exec('git describe --tags --always --dirty 2>/dev/null'));
+        }
+        return preg_replace('/[^A-Za-z0-9._+-]/', '', $version) ?: 'dev';
+    }
+
+    public function build(): bool
     {
         $output = '';
         foreach ($this->sourceFiles as $file) {
-            if (!file_exists($file)) {
-                echo "Warning: Source file '$file' not found!\n";
-                continue;
-            }
             $content = @file_get_contents($file);
             if ($content === false) {
-                echo "Error: Could not read file '$file'\n";
-                continue;
+                fwrite(STDERR, "Error: Could not read file '$file'\n");
+                return false;
             }
-            $content = $this->minifyContent($content);
-            $output .= $content . "\n";
+            $output .= $this->minifyContent($content) . "\n";
         }
 
         $buildDir = dirname($this->outputFile);
-        if (!is_dir($buildDir)) {
-            if (!mkdir($buildDir, 0777, true) && !is_dir($buildDir)) {
-                echo "Error: Could not create directory '$buildDir'\n";
-                return;
-            }
+        if (!is_dir($buildDir) && !mkdir($buildDir, 0755, true) && !is_dir($buildDir)) {
+            fwrite(STDERR, "Error: Could not create directory '$buildDir'\n");
+            return false;
         }
 
-        $timestamp = date('Y-m-d H:i:s');
-        $output = "<?php /* Built: {$timestamp} */ session_start(); ?>\n" . $output;
+        // No timestamp: the same sources always produce the same file.
+        $header = "<?php /* simpeda {$this->version()} */ "
+            . "session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict', 'secure' => !empty(\$_SERVER['HTTPS'])]); "
+            . "session_start(); ?>\n";
+        $output = $header . $output;
 
-        $output = preg_replace('/\?>\s*<\?php/', '', $output);
+        // A PHP close tag implies a semicolon, so join each close/open tag pair with an explicit one.
+        $output = preg_replace('/\?>\s*<\?php\s*/', ';', $output);
         if (strpos($output, '?>') === false) {
             $output = rtrim($output);
         }
 
-        $output = preg_replace('/\?>\s*\/\*/', '?> /*', $output);
-        $output = preg_replace('/\*\/\s*<\?php/', '*/ <?php', $output);
-
         if (file_put_contents($this->outputFile, $output) === false) {
-            echo "Error: Could not write to file '{$this->outputFile}'\n";
-            return;
+            fwrite(STDERR, "Error: Could not write to file '{$this->outputFile}'\n");
+            return false;
         }
         echo "Build completed: {$this->outputFile}\n";
+        return true;
     }
 
     public function watch(): void
@@ -205,17 +177,27 @@ class Builder
         return $times;
     }
 
-    public function serve(int $port = 8000): void
+    public function serve(int $port = 8000): bool
     {
-        $this->build();
-        if (PHP_OS_FAMILY === 'Windows') {
-            pclose(popen(sprintf('start /B php "%s" watch', __FILE__), 'r'));
-        } else {
-            exec(sprintf('php "%s" watch > /dev/null 2>&1 &', __FILE__));
+        if (!$this->build()) {
+            return false;
         }
-        $command = sprintf('php -S localhost:%d -t %s', $port, dirname($this->outputFile));
+        // index.php is the router script so /login, /install etc. reach the app.
+        $server = proc_open(
+            [PHP_BINARY, '-S', "localhost:$port", '-t', dirname($this->outputFile), $this->outputFile],
+            [],
+            $pipes
+        );
+        if (!is_resource($server)) {
+            fwrite(STDERR, "Error: Could not start the PHP server\n");
+            return false;
+        }
+        register_shutdown_function(static function () use ($server) {
+            proc_terminate($server);
+        });
         echo "Starting server at http://localhost:$port\n";
-        shell_exec($command);
+        $this->watch();
+        return true;
     }
 }
 $sourceFiles = array_merge(
@@ -232,15 +214,13 @@ $builder = new Builder($sourceFiles, $outputFile);
 if ($argc > 1) {
     switch ($argv[1]) {
         case 'build':
-            $builder->build();
-            break;
+            exit($builder->build() ? 0 : 1);
         case 'watch':
             $builder->watch();
             break;
         case 'serve':
             $port = isset($argv[2]) ? (int) $argv[2] : 8000;
-            $builder->serve($port);
-            break;
+            exit($builder->serve($port) ? 0 : 1);
         default:
             echo "Unknown command. Available commands: build, watch, serve [port]\n";
             exit(1);
@@ -253,4 +233,3 @@ if ($argc > 1) {
     echo "  serve     - Build, watch for changes, and start PHP server\n";
     exit(1);
 }
-?>
