@@ -144,6 +144,14 @@ class Builder
             $output = rtrim($output);
         }
 
+        // Embed the agent installer script (kept as a real .sh file so it can be linted).
+        $script = @file_get_contents(__DIR__ . '/src/agent-install.sh');
+        if ($script === false) {
+            fwrite(STDERR, "Error: Could not read src/agent-install.sh\n");
+            return false;
+        }
+        $output = str_replace("'__AGENT_INSTALL_SH__'", var_export($script, true), $output);
+
         if (file_put_contents($this->outputFile, $output) === false) {
             fwrite(STDERR, "Error: Could not write to file '{$this->outputFile}'\n");
             return false;

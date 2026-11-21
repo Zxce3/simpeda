@@ -55,6 +55,7 @@ function getCssStyle()
         h3 { font-size: 14px; }
         pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
         pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
+        details summary { cursor: pointer; margin: 8px 0; color: var(--accent); }
         .muted { color: var(--muted); }
         .small { font-size: 12px; }
         .hidden { display: none !important; }

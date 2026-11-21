@@ -14,8 +14,12 @@ function pocketbaseDataPath()
 }
 
 const POCKETBASE_LOG = 'pocketbase.log';
-const DEFAULT_PORT = 8090;
-const MAX_PORT = 8100;
+// Port PocketBase listens on (127.0.0.1 only). Change it with SIMPEDA_PB_PORT if 8090 is taken.
+function pocketbasePort()
+{
+    $port = (int) getenv('SIMPEDA_PB_PORT');
+    return $port >= 1024 && $port <= 65535 ? $port : 8090;
+}
 
 
 function handleRequest()
@@ -44,6 +48,8 @@ function handleRequest()
 
         if ($method === 'GET' && $path === '/download/agent') {
             serveAgentScript();
+        } elseif ($method === 'GET' && $path === '/install/agent.sh') {
+            serveAgentInstaller();
         } elseif ($method === 'GET') {
             handleGetRequests($path, $query);
         } elseif ($method === 'POST') {
@@ -63,6 +69,24 @@ function serveAgentScript()
     header('Content-Type: text/x-php; charset=utf-8');
     header('Content-Disposition: attachment; filename="simpeda.php"');
     readfile(__FILE__);
+}
+
+// Dashboard address as the visitor reached it, used as the installer's default --url.
+function requestBaseUrl()
+{
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    if (!preg_match('/^[A-Za-z0-9.-]+(:\d{1,5})?$/', $host) && !preg_match('/^\[[0-9A-Fa-f:]+\](:\d{1,5})?$/', $host)) {
+        return '';
+    }
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+    return ($https ? 'https://' : 'http://') . $host;
+}
+
+function serveAgentInstaller()
+{
+    header('Content-Type: text/plain; charset=utf-8');
+    echo str_replace('__URL__', requestBaseUrl(), agentInstallScript());
 }
 
 function ensurePocketbaseRunning()
@@ -224,7 +248,7 @@ function handlePocketbaseStatus()
 function isPocketbaseRunning()
 {
     try {
-        $ch = curl_init("http://127.0.0.1:" . DEFAULT_PORT . "/api/health");
+        $ch = curl_init("http://127.0.0.1:" . pocketbasePort() . "/api/health");
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 5,
@@ -267,8 +291,10 @@ function isPortInUse($port)
     return false;
 }
 
-function findAvailablePort($startPort = DEFAULT_PORT, $maxPort = MAX_PORT)
+function findAvailablePort($startPort = null, $maxPort = null)
 {
+    $startPort = $startPort ?? pocketbasePort();
+    $maxPort = $maxPort ?? $startPort + 10;
     for ($port = $startPort; $port <= $maxPort; $port++) {
         $connection = @fsockopen('127.0.0.1', $port);
         if (!$connection) {
@@ -322,7 +348,7 @@ function installPocketbase($email, $password)
     $command = sprintf(
         '%s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
         escapeshellarg(pocketbasePath()),
-        (int) DEFAULT_PORT,
+        pocketbasePort(),
         escapeshellarg(pocketbaseDataPath()),
         escapeshellarg(POCKETBASE_LOG)
     );
