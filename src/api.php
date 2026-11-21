@@ -1,5 +1,6 @@
 <?php
 
+const POCKETBASE_VERSION = '0.24.2';
 const POCKETBASE_PATH = 'pocketbase';
 const POCKETBASE_DATA_PATH = 'pocketbase/pb_data';
 const POCKETBASE_LOG = 'pocketbase.log';
@@ -130,8 +131,8 @@ function handlePostRequests($path)
         }
         $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
         $password = (string) ($_POST['password'] ?? '');
-        if ($email === '' || $password === '') {
-            sendResponse(['error' => 'A valid email and a password are required'], 400);
+        if ($email === '' || strlen($password) < 8) {
+            sendResponse(['error' => 'A valid email and a password of at least 8 characters are required'], 400);
             return;
         }
         installPocketbase($email, $password);
@@ -256,7 +257,7 @@ function installPocketbase($email, $password)
 {
     $arch = getSystemArch();
     $os = strtolower(PHP_OS);
-    $version = '0.24.2';
+    $version = POCKETBASE_VERSION;
     $filename = "pocketbase_{$version}_{$os}_{$arch}.zip";
     $url = "https://github.com/pocketbase/pocketbase/releases/download/v{$version}/$filename";
 
@@ -279,10 +280,10 @@ function installPocketbase($email, $password)
 
     $command = sprintf(
         '%s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
-        escapeshellcmd(POCKETBASE_PATH),
+        escapeshellarg(POCKETBASE_PATH),
         (int) DEFAULT_PORT,
-        escapeshellcmd(POCKETBASE_DATA_PATH),
-        escapeshellcmd(POCKETBASE_LOG)
+        escapeshellarg(POCKETBASE_DATA_PATH),
+        escapeshellarg(POCKETBASE_LOG)
     );
     exec($command);
     sleep(5);
@@ -292,9 +293,13 @@ function installPocketbase($email, $password)
         sendResponse(['error' => 'Failed to start Pocketbase during installation'], 500);
     }
 
-    $command = escapeshellcmd(POCKETBASE_PATH . "/pocketbase superuser create " .
-        escapeshellarg($email) . " " .
-        escapeshellarg($password));
+    // escapeshellcmd() on top of escapeshellarg() mangled special characters in the password.
+    $command = sprintf(
+        '%s superuser create %s %s',
+        escapeshellarg(POCKETBASE_PATH . '/pocketbase'),
+        escapeshellarg($email),
+        escapeshellarg($password)
+    );
     exec($command, $output, $return_var);
     if ($return_var !== 0) {
         sendResponse(['error' => 'Failed to create superuser'], 500);
@@ -311,10 +316,10 @@ function startPocketbase($port)
 {
     $command = sprintf(
         'nohup %s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
-        escapeshellcmd(POCKETBASE_PATH),
+        escapeshellarg(POCKETBASE_PATH),
         (int) $port,
-        escapeshellcmd(POCKETBASE_DATA_PATH),
-        escapeshellcmd(POCKETBASE_LOG)
+        escapeshellarg(POCKETBASE_DATA_PATH),
+        escapeshellarg(POCKETBASE_LOG)
     );
     exec($command);
     sleep(5);
