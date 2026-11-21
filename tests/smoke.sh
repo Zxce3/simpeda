@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # Builds the app and exercises auth against a stub PocketBase (no real PocketBase needed).
-# Usage: tests/smoke.sh   (needs php, curl; uses ports 8000 and 8090)
+# Usage: tests/smoke.sh   (needs php, curl; uses ports 18000 and 18090, override with SIMPEDA_TEST_APP_PORT / SIMPEDA_TEST_PB_PORT)
 set -u
+# Ports are chosen to avoid clashing with a dashboard you run yourself (8000, 8080, 8090).
+APP_PORT=${SIMPEDA_TEST_APP_PORT:-18000}
+PB_PORT=${SIMPEDA_TEST_PB_PORT:-18090}
+export SIMPEDA_PB_PORT=$PB_PORT
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
 pids=()
 cleanup() { kill "${pids[@]}" 2>/dev/null; rm -rf "$work"; }
 trap cleanup EXIT
 
-for port in 8000 8090; do
+for port in $APP_PORT $PB_PORT; do
   if (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null; then echo "port $port is in use"; exit 1; fi
 done
 
@@ -18,16 +22,16 @@ mkdir -p "$work/pocketbase/pb_data"
 
 export STUB_REVOKED_FILE="$work/revoked"
 export SIMPEDA_VERIFY_INTERVAL=1
-php -S 127.0.0.1:8090 "$root/tests/stub_pocketbase.php" >/dev/null 2>&1 & pids+=($!)
-(cd "$work" && exec php -S 127.0.0.1:8000 index.php >"$work/app.log" 2>&1) & pids+=($!)
-for _ in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:8000/login && break; sleep 0.2; done
+php -S 127.0.0.1:$PB_PORT "$root/tests/stub_pocketbase.php" >/dev/null 2>&1 & pids+=($!)
+(cd "$work" && exec php -S 127.0.0.1:$APP_PORT index.php >"$work/app.log" 2>&1) & pids+=($!)
+for _ in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:$APP_PORT/login && break; sleep 0.2; done
 
 fail=0
 check() { # name expected actual
   if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1 (expected $2, got $3)"; fail=1; fi
 }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
-app=http://127.0.0.1:8000
+app=http://127.0.0.1:$APP_PORT
 password='p&ss<word>"1'
 
 csrf_for() { curl -s -c "$1" -b "$1" "$app/login" | sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' | head -1; }
