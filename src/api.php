@@ -79,18 +79,14 @@ function handleGetRequests($path, $query)
                     redirect('/login');
                     return;
                 }
-                if (!web_router('dashboard')) {
-                    displayErrorPage();
-                }
+                web_router('dashboard');
                 return;
             case 'login':
                 if (isUserAuthenticated()) {
                     redirect('/dashboard');
                     return;
                 }
-                if (!web_router('login')) {
-                    displayErrorPage();
-                }
+                web_router('login');
                 return;
             default:
                 displayErrorPage();
@@ -120,9 +116,8 @@ function handleGetRequests($path, $query)
         redirect('/login');
     }
 
-    if (!web_router(ltrim($path, '/'))) {
-        displayErrorPage();
-    }
+    // web_router() renders the 404 page itself for unknown routes.
+    web_router(ltrim($path, '/'));
 }
 
 function handlePostRequests($path)
