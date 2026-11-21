@@ -28,7 +28,7 @@ check "api without auth is rejected" 401 "$(code "$app/?api=1")"
 forged="a.$(printf '{"exp":9999999999}' | base64 -w0 | tr '+/' '-_' | tr -d '=').b"
 check "api with forged cookie is rejected" 401 "$(code -H "Cookie: auth_token=$forged" "$app/?api=1")"
 
-check "install on installed instance is refused" 409 "$(code -X POST -d 'email=evil@example.com&password=x' "$app/install")"
+check "web install is disabled" 403 "$(code -X POST -d 'email=evil@example.com&password=x' "$app/install")"
 
 login=$(curl -s -i --data-urlencode 'email=admin@example.com' --data-urlencode 'password=p&ss<word>"1' "$app/?login")
 token=$(printf '%s' "$login" | tr -d '\r' | sed -n 's/^Set-Cookie: auth_token=\([^;]*\).*/\1/p' | head -1)

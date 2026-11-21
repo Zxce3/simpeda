@@ -23,6 +23,17 @@ This project provides a simplified system information display for a server dashb
 - Git installed on your system
 - Currently supports Linux or Debian-based systems
 
+## Setup
+
+Copy `build/index.php` (from a release or `php build.php build`) to your web root, then create the first PocketBase superuser **from the command line** on the server, as the [PocketBase docs](https://pocketbase.io/docs/) describe:
+
+```bash
+php index.php install                      # prompts for email and a hidden password
+echo "$PASS" | php index.php install --email=you@example.com   # non-interactive
+```
+
+This downloads the pinned PocketBase release (checksum-verified), starts it, creates the superuser and the schema. There is no web installer: `/install` only shows these instructions, so nobody can claim an unconfigured instance through the browser. Note that PocketBase's own `superuser create` takes the password as an argument, so it is briefly visible in the process list on the server.
+
 ## Usage
 
 ### API Endpoint

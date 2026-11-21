@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end test with a REAL PocketBase: runs the app's own installer (downloads the
+# End-to-end test with a REAL PocketBase: runs the app's CLI installer (php index.php install) (downloads the
 # pinned PocketBase release from GitHub), then checks the schema, login and API.
 # Needs network, php, curl, unzip; uses ports 8000 and 8090. Not run in CI.
 set -u
@@ -35,11 +35,15 @@ sleep 1
 
 check "fresh instance redirects to /install" 302 "$(code "$app/")"
 check "install page renders" 200 "$(code "$app/install")"
-check "short password is rejected" 400 "$(code -d "email=$email&password=short" "$app/install")"
+check "web install is disabled" 403 "$(code -d "email=$email&password=$password" "$app/install")"
 
-echo "installing PocketBase (downloads, starts, creates superuser and schema)..."
-out=$(curl -s --max-time 120 --data-urlencode "email=$email" --data-urlencode "password=$password" "$app/install")
-check "install succeeds" '{"message":"Installation successful"}' "$out"
+cli() { (cd "$work" && php index.php install "$@"); }
+printf 'short\n' | cli --email="$email" >/dev/null 2>&1; check "CLI rejects a short password" 1 "$?"
+printf 'x\n' | cli --email=not-an-email >/dev/null 2>&1; check "CLI rejects an invalid email" 1 "$?"
+echo "installing PocketBase via CLI (downloads, starts, creates superuser and schema)..."
+printf '%s\n' "$password" | cli --email="$email" >"$work/cli.log" 2>&1
+check "CLI install succeeds" 0 "$?"
+printf '%s\n' "$password" | cli --email="$email" >/dev/null 2>&1; check "CLI refuses to install twice" 1 "$?"
 
 body=$(php -r 'echo json_encode(["identity"=>$argv[1],"password"=>$argv[2]]);' "$email" "$password")
 token=$(curl -s -X POST "$pb/api/collections/_superusers/auth-with-password" -H 'Content-Type: application/json' -d "$body" | json '$j["token"] ?? ""')
@@ -51,7 +55,7 @@ check "schema collections created" cpu,global_info,host,server,state "$names"
 fields=$(curl -s -H "Authorization: Bearer $token" "$pb/api/collections/pbc_state" | json 'count($j["fields"] ?? [])')
 check "state collection has its schema fields" yes "$([ "${fields:-0}" -ge 12 ] && echo yes || echo no)"
 
-check "reinstall is refused" 409 "$(code -d "email=evil@example.com&password=whatever123" "$app/install")"
+check "web reinstall is refused" 403 "$(code -d "email=evil@example.com&password=whatever123" "$app/install")"
 check "api without auth is rejected" 401 "$(code "$app/?api=1")"
 check "dashboard without auth redirects" 302 "$(code "$app/?dashboard")"
 
