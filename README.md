@@ -23,6 +23,40 @@ Inspired by [Nezha](https://github.com/nezhahq/nezha). Data lives in [PocketBase
 - **Status page**: optional public page. Shows only what you mark public.
 - **Light and dark theme**, works on phones.
 
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph servers["Your servers"]
+        A1["agent<br/>php index.php agent"]
+        A2["agent"]
+        A3["agent"]
+    end
+
+    subgraph host["Dashboard host"]
+        APP["index.php<br/>web UI + JSON API"]
+        W["worker<br/>php index.php worker"]
+        PB[("PocketBase<br/>servers, metrics,<br/>monitors, alerts")]
+    end
+
+    U(["You<br/>browser"])
+    V(["Visitors"])
+    T["Websites, ports,<br/>hosts"]
+    N["Discord / Telegram /<br/>webhook"]
+
+    A1 & A2 & A3 -- "metrics every 5s<br/>(token, HTTPS)" --> APP
+    APP <--> PB
+    U -- "login" --> APP
+    V -. "/status (opt-in)" .-> APP
+    W <--> PB
+    W -- "HTTP / TCP / ping" --> T
+    W -- "offline, high load,<br/>monitor down, recovered" --> N
+```
+
+- Agents push metrics. The dashboard stores one sample per minute and keeps the latest values live.
+- The worker runs the monitors, checks alert rules and deletes old data.
+- PocketBase is only reached by the app, never by browsers or agents.
+
 ## Screenshots
 
 | Server detail | Monitors |
