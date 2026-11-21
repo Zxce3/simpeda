@@ -138,7 +138,6 @@ class Auth
 
 function handleLogin()
 {
-    $isHome = ($_SERVER['REQUEST_URI'] === '/');
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_GET['logout'])) {
             Auth::logout();
@@ -157,10 +156,10 @@ function handleLogin()
             header('Location: /dashboard');
             exit;
         } else {
-            displayLoginForm('Invalid email or password.', $isHome);
+            displayLoginForm('Invalid email or password.');
         }
     } else {
-        displayLoginForm('', $isHome);
+        displayLoginForm('');
     }
 }
 

@@ -5,7 +5,7 @@ function load_page(string $__page)
     web_router($__page);
     $__out = ob_get_clean();
     $opt = [];
-    load_body($__out ?? '', $opt);
+    load_body($__out, $opt);
 }
 
 function web_router(string $uri): bool
@@ -44,7 +44,7 @@ function web_router(string $uri): bool
 function load_body(string $content = "", array $opt = [])
 {
     extract($opt);
-    echo generate_body($content ?? '', $title ?? '');
+    echo generate_body($content, $title ?? '');
 }
 
 function e(string $str): string

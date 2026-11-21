@@ -99,7 +99,7 @@ class PocketBaseClient
         return $this->delete("/api/collections/$collection/records/$id");
     }
 
-    public function subscribeToRealtime($collection, $recordId = null, $callback)
+    public function subscribeToRealtime($collection, callable $callback, $recordId = null)
     {
         $url = $this->baseUrl . '/api/realtime';
         if ($recordId) {
