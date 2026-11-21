@@ -1,8 +1,18 @@
 <?php
 
 const POCKETBASE_VERSION = '0.40.6';
-const POCKETBASE_PATH = 'pocketbase';
-const POCKETBASE_DATA_PATH = 'pocketbase/pb_data';
+// Keep this directory out of the web root (or deny it in the web server): it holds the
+// database and the service credentials. SIMPEDA_PB_DIR relocates it.
+function pocketbasePath()
+{
+    return rtrim(getenv('SIMPEDA_PB_DIR') ?: 'pocketbase', '/');
+}
+
+function pocketbaseDataPath()
+{
+    return pocketbasePath() . '/pb_data';
+}
+
 const POCKETBASE_LOG = 'pocketbase.log';
 const DEFAULT_PORT = 8090;
 const MAX_PORT = 8100;
@@ -17,22 +27,53 @@ function handleRequest()
     $query = $parsedUri['query'] ?? '';
 
     try {
+        if (strncmp($path, '/api/', 5) === 0) {
+            if (!isPocketbaseInstalled()) {
+                sendResponse(['error' => 'Not installed. Run: php index.php install'], 503);
+                return;
+            }
+            ensurePocketbaseRunning();
+            handleApi($method, $path);
+            return;
+        }
+
         if (!isPocketbaseInstalled() && $path !== '/install') {
             redirect('/install');
         }
 
-        if ($method === 'GET') {
+        if ($method === 'GET' && $path === '/download/agent') {
+            serveAgentScript();
+        } elseif ($method === 'GET') {
             handleGetRequests($path, $query);
         } elseif ($method === 'POST') {
             handlePostRequests($path);
         } else {
             sendResponse(['error' => 'Method not allowed'], 405);
         }
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         error_log($e->getMessage());
         sendResponse(['error' => 'Internal Server Error'], 500);
     }
 }
+
+// The agent is this same file, so remote servers can fetch it from the dashboard.
+function serveAgentScript()
+{
+    header('Content-Type: text/x-php; charset=utf-8');
+    header('Content-Disposition: attachment; filename="simpeda.php"');
+    readfile(__FILE__);
+}
+
+function ensurePocketbaseRunning()
+{
+    if (isPocketbaseInstalled() && !isPocketbaseRunning()) {
+        $port = findAvailablePort();
+        if ($port) {
+            startPocketbase($port);
+        }
+    }
+}
+
 function redirect($location)
 {
     header("Location: $location");
@@ -40,7 +81,7 @@ function redirect($location)
 }
 function isPocketbaseInstalled()
 {
-    return file_exists(POCKETBASE_DATA_PATH);
+    return file_exists(pocketbaseDataPath());
 }
 function handleGetRequests($path, $query)
 {
@@ -99,21 +140,19 @@ function handleGetRequests($path, $query)
         return;
     }
 
-    if (isPocketbaseInstalled() && !isPocketbaseRunning()) {
-        $port = findAvailablePort();
-        if ($port) {
-            startPocketbase($port);
-            sleep(2);
-        }
-    }
+    ensurePocketbaseRunning();
 
     if ($path === '/install' && isPocketbaseInstalled() && isPocketbaseRunning()) {
         redirect('/');
         return;
     }
 
-    if (trim($path, '/') === 'dashboard' && !isUserAuthenticated()) {
+    $page = trim($path, '/');
+    if (in_array($page, ['dashboard', 'server', 'monitors', 'settings'], true) && !isUserAuthenticated()) {
         redirect('/login');
+    }
+    if ($page === '') {
+        redirect(isUserAuthenticated() ? '/dashboard' : '/status');
     }
 
     // web_router() renders the 404 page itself for unknown routes.
@@ -160,7 +199,7 @@ function handlePostRequests($path)
 
 function handlePocketbaseStatus()
 {
-    if (!file_exists(POCKETBASE_DATA_PATH)) {
+    if (!file_exists(pocketbaseDataPath())) {
         sendResponse(['error' => 'Pocketbase is not installed'], 404);
         return;
     }
@@ -273,7 +312,7 @@ function installPocketbase($email, $password)
         throw new RuntimeException('Pocketbase checksum verification failed');
     }
 
-    $unzipCommand = sprintf('unzip -o %s -d %s', escapeshellarg($filename), escapeshellarg(POCKETBASE_PATH));
+    $unzipCommand = sprintf('unzip -o %s -d %s', escapeshellarg($filename), escapeshellarg(pocketbasePath()));
     exec($unzipCommand, $output, $return_var);
     if ($return_var !== 0) {
         unlink($filename);
@@ -283,9 +322,9 @@ function installPocketbase($email, $password)
 
     $command = sprintf(
         '%s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
-        escapeshellarg(POCKETBASE_PATH),
+        escapeshellarg(pocketbasePath()),
         (int) DEFAULT_PORT,
-        escapeshellarg(POCKETBASE_DATA_PATH),
+        escapeshellarg(pocketbaseDataPath()),
         escapeshellarg(POCKETBASE_LOG)
     );
     exec($command);
@@ -299,7 +338,7 @@ function installPocketbase($email, $password)
     // escapeshellcmd() on top of escapeshellarg() mangled special characters in the password.
     $command = sprintf(
         '%s superuser create %s %s',
-        escapeshellarg(POCKETBASE_PATH . '/pocketbase'),
+        escapeshellarg(pocketbasePath() . '/pocketbase'),
         escapeshellarg($email),
         escapeshellarg($password)
     );
@@ -310,7 +349,7 @@ function installPocketbase($email, $password)
 
     $client = new PocketBaseClient(Auth::pocketbaseUrl());
     $client->authWithPassword($email, $password);
-    createSystemInformationSchema($client, $email, $password);
+    migrateSchema($client);
 
     return true;
 }
@@ -319,9 +358,9 @@ function startPocketbase($port)
 {
     $command = sprintf(
         'nohup %s/pocketbase serve --http="127.0.0.1:%d" --dir=%s > %s 2>&1 &',
-        escapeshellarg(POCKETBASE_PATH),
+        escapeshellarg(pocketbasePath()),
         (int) $port,
-        escapeshellarg(POCKETBASE_DATA_PATH),
+        escapeshellarg(pocketbaseDataPath()),
         escapeshellarg(POCKETBASE_LOG)
     );
     exec($command);
@@ -335,11 +374,10 @@ function startPocketbase($port)
 
 function sendResponse($data, $status = 200)
 {
-    header("HTTP/1.1 " . $status);
-
+    http_response_code($status);
+    header('Content-Type: application/json');
     echo json_encode($data);
 }
-
 
 function promptLine($prompt)
 {
@@ -367,52 +405,97 @@ function promptPassword($prompt)
     return $password;
 }
 
-// Command line entry point: php index.php install [--email=EMAIL]
-// The password is read from the terminal (hidden) or from stdin when piped.
+function parseCliArgs(array $argv)
+{
+    $args = [];
+    foreach (array_slice($argv, 2) as $arg) {
+        if (preg_match('/^--([a-z-]+)(?:=(.*))?$/s', $arg, $m)) {
+            $args[$m[1]] = $m[2] ?? true;
+        }
+    }
+    return $args;
+}
+
+function cliUsage()
+{
+    return <<<TXT
+Usage: php index.php <command> [options]
+
+  install [--email=EMAIL]      create the first superuser, download and set up PocketBase
+  migrate [--email=EMAIL]      create/upgrade collections and the service account (after upgrades)
+  worker                       run service monitors, alerts and data pruning (keep running)
+  agent --url=URL --token=T    report this machine's metrics to a dashboard
+        [--interval=5] [--once]
+
+TXT;
+}
+
+// Reads email/password for an existing or new superuser (hidden prompt, or stdin when piped).
+function promptCredentials(array $args, $confirm)
+{
+    $email = isset($args['email']) && is_string($args['email']) ? $args['email'] : promptLine('Superuser email: ');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('A valid email is required.');
+    }
+    $password = promptPassword($confirm ? 'Password (min 8 characters): ' : 'Password: ');
+    if ($confirm && stream_isatty(STDIN) && promptPassword('Repeat password: ') !== $password) {
+        throw new InvalidArgumentException('Passwords do not match.');
+    }
+    if ($confirm && strlen($password) < 8) {
+        throw new InvalidArgumentException('The password must be at least 8 characters.');
+    }
+    return [$email, $password];
+}
+
 function runCli(array $argv)
 {
     $command = $argv[1] ?? 'help';
-    if ($command !== 'install') {
-        fwrite(STDERR, "Usage: php index.php install [--email=EMAIL]\n");
-        return $command === 'help' ? 0 : 1;
-    }
-
+    $args = parseCliArgs($argv);
     chdir(__DIR__);
-    if (isPocketbaseInstalled()) {
-        fwrite(STDERR, "PocketBase is already installed (" . POCKETBASE_DATA_PATH . " exists).\n");
-        return 1;
-    }
-
-    $email = null;
-    foreach ($argv as $arg) {
-        if (strncmp($arg, '--email=', 8) === 0) {
-            $email = substr($arg, 8);
-        }
-    }
-    $email = $email ?? promptLine('Superuser email: ');
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        fwrite(STDERR, "A valid email is required.\n");
-        return 1;
-    }
-
-    $password = promptPassword('Password (min 8 characters): ');
-    if (stream_isatty(STDIN) && promptPassword('Repeat password: ') !== $password) {
-        fwrite(STDERR, "Passwords do not match.\n");
-        return 1;
-    }
-    if (strlen($password) < 8) {
-        fwrite(STDERR, "The password must be at least 8 characters.\n");
-        return 1;
-    }
 
     try {
-        installPocketbase($email, $password);
+        switch ($command) {
+            case 'install':
+                if (isPocketbaseInstalled()) {
+                    fwrite(STDERR, "PocketBase is already installed (" . pocketbaseDataPath() . " exists).\n");
+                    return 1;
+                }
+                [$email, $password] = promptCredentials($args, true);
+                installPocketbase($email, $password);
+                echo "PocketBase " . POCKETBASE_VERSION . " installed. Log in to the dashboard as $email.\n";
+                return 0;
+
+            case 'migrate':
+                if (!isPocketbaseInstalled()) {
+                    fwrite(STDERR, "PocketBase is not installed. Run: php index.php install\n");
+                    return 1;
+                }
+                [$email, $password] = promptCredentials($args, false);
+                ensurePocketbaseRunning();
+                $client = new PocketBaseClient(Auth::pocketbaseUrl());
+                $client->authWithPassword($email, $password);
+                migrateSchema($client);
+                echo "Schema is up to date.\n";
+                return 0;
+
+            case 'worker':
+                return runWorker();
+
+            case 'agent':
+                return runAgent($args);
+
+            case 'help':
+                echo cliUsage();
+                return 0;
+
+            default:
+                fwrite(STDERR, cliUsage());
+                return 1;
+        }
     } catch (Throwable $e) {
-        fwrite(STDERR, 'Install failed: ' . $e->getMessage() . "\n");
+        fwrite(STDERR, $command . ' failed: ' . $e->getMessage() . "\n");
         return 1;
     }
-    echo "PocketBase " . POCKETBASE_VERSION . " installed. Log in to the dashboard as $email.\n";
-    return 0;
 }
 
 if (PHP_SAPI === 'cli') {

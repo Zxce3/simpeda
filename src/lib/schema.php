@@ -1,379 +1,160 @@
 <?php
 
-function createSystemInformationSchema(PocketBaseClient $pocketBaseClient, $email, $password)
+// PocketBase schema and the service account the app uses for its own database access.
+// Everything here is idempotent: `php index.php migrate` is safe to re-run after upgrades.
+
+// Note: build.php concatenates src/ and api.php runs first, so later files must only declare
+// functions and classes (a top-level const here would not be defined yet).
+function serviceEmail()
 {
-    $pocketBaseClient->authWithPassword($email, $password);
+    return 'simpeda-service@simpeda.local';
+}
 
-    $collections = [
-        'global_info' => [
-            'id' => 'pbc_global_info',
-            'name' => 'global_info',
-            'type' => 'base',
+function schemaDefinition()
+{
+    $text = fn($name, $required = false) => ['name' => $name, 'type' => 'text', 'required' => $required];
+    $num = fn($name) => ['name' => $name, 'type' => 'number'];
+    $bool = fn($name) => ['name' => $name, 'type' => 'bool'];
+    $json = fn($name) => ['name' => $name, 'type' => 'json', 'maxSize' => 2000000];
+    $rel = fn($name, $target) => ['name' => $name, 'type' => 'relation', 'collection' => $target, 'maxSelect' => 1, 'cascadeDelete' => true];
+
+    // Order matters: relations point at collections defined earlier.
+    return [
+        'servers' => [
+            'fields' => [
+                $text('name', true), $text('token_hash', true), $text('country_code'), $text('note'),
+                $bool('public'), $num('sort'), $num('last_seen'), $num('last_history'),
+                $json('host'), $json('live'),
+            ],
+            'indexes' => ['CREATE UNIQUE INDEX idx_servers_token ON servers (token_hash)'],
         ],
-        'server' => [
-            'id' => 'pbc_server',
-            'name' => 'server',
-            'type' => 'base',
+        'metrics' => [
+            'fields' => [
+                $rel('server', 'servers'), $num('ts'), $num('cpu'), $num('mem'), $num('swap'), $num('disk'),
+                $num('load1'), $num('load5'), $num('load15'), $num('rx_speed'), $num('tx_speed'),
+                $num('rx_total'), $num('tx_total'), $num('uptime'), $num('procs'),
+            ],
+            'indexes' => ['CREATE INDEX idx_metrics_server_ts ON metrics (server, ts)', 'CREATE INDEX idx_metrics_ts ON metrics (ts)'],
         ],
-        'host' => [
-            'id' => 'pbc_host',
-            'name' => 'host',
-            'type' => 'base',
+        'monitors' => [
+            'fields' => [
+                $text('name', true), $text('type', true), $text('target', true), $num('interval'), $num('timeout'),
+                $num('expect_status'), $bool('enabled'), $bool('public'), $num('last_run'), $num('last_ok'),
+                $num('last_latency'), $num('fail_streak'),
+            ],
         ],
-        'cpu' => [
-            'id' => 'pbc_cpu',
-            'name' => 'cpu',
-            'type' => 'base',
+        'monitor_results' => [
+            'fields' => [
+                $rel('monitor', 'monitors'), $num('ts'), $bool('ok'), $num('latency'), $num('status'), $text('error'),
+            ],
+            'indexes' => ['CREATE INDEX idx_results_monitor_ts ON monitor_results (monitor, ts)', 'CREATE INDEX idx_results_ts ON monitor_results (ts)'],
         ],
-        'state' => [
-            'id' => 'pbc_state',
-            'name' => 'state',
-            'type' => 'base',
-        ]
+        'alert_events' => [
+            'fields' => [$text('kind', true), $text('subject'), $text('message'), $num('ts'), $bool('resolved')],
+            'indexes' => ['CREATE INDEX idx_alerts_ts ON alert_events (ts)'],
+        ],
+        'settings' => [
+            'fields' => [$text('key', true), $json('value')],
+            'indexes' => ['CREATE UNIQUE INDEX idx_settings_key ON settings (key)'],
+        ],
     ];
+}
 
-   
-    foreach ($collections as $collectionData) {
-        $pocketBaseClient->createCollection($collectionData);
+function ensureCollection(PocketBaseClient $client, $name, array $definition)
+{
+    $existing = $client->get("/api/collections/$name");
+    $fields = $definition['fields'];
+
+    // Resolve relation targets (by name) to collection ids.
+    foreach ($fields as &$field) {
+        if (($field['type'] ?? '') === 'relation') {
+            $target = $client->get('/api/collections/' . $field['collection']);
+            $field['collectionId'] = $target['id'] ?? '';
+            unset($field['collection']);
+        }
+    }
+    unset($field);
+
+    if ($client->lastStatus === 404 || empty($existing['id'])) {
+        $created = $client->post('/api/collections', [
+            'name' => $name,
+            'type' => 'base',
+            'fields' => $fields,
+            'indexes' => $definition['indexes'] ?? [],
+        ]);
+        if (empty($created['id'])) {
+            throw new RuntimeException("Could not create collection $name: " . json_encode($created));
+        }
+        return;
     }
 
-   
-    $pocketBaseClient->updateCollection('pbc_global_info', [
-        'fields' => array_merge(
-            getNowField(),
-            getOnlineField(),
-            getTimestampFields()
-        )
-    ]);
-
-    $pocketBaseClient->updateCollection('pbc_server', [
-        'fields' => array_merge(
-            getNameField(),
-            getCountryCodeField(),
-            getLastActiveField(),
-            getGlobalInfoIdField(),
-            getTimestampFields()
-        )
-    ]);
-
-    $pocketBaseClient->updateCollection('pbc_host', [
-        'fields' => array_merge(
-            getPlatformField(),
-            getMemTotalField(),
-            getDiskTotalField(),
-            getSwapTotalField(),
-            getArchField(),
-            getBootTimeField(),
-            getServerIdField(),
-            getTimestampFields()
-        )
-    ]);
-
-    $pocketBaseClient->updateCollection('pbc_cpu', [
-        'fields' => array_merge(
-            getDescriptionField(),
-            getHostIdField(),
-            getTimestampFields()
-        )
-    ]);
-
-    $pocketBaseClient->updateCollection('pbc_state', [
-        'fields' => array_merge(
-            getCpuUsageField(),
-            getMemUsedField(),
-            getDiskUsedField(),
-            getNetInTransferField(),
-            getNetOutTransferField(),
-            getNetInSpeedField(),
-            getNetOutSpeedField(),
-            getUptimeField(),
-            getServerIdField(),
-            getTimestampFields()
-        )
-    ]);
+    $have = array_column($existing['fields'], 'name');
+    $missing = array_values(array_filter($fields, fn($f) => !in_array($f['name'], $have, true)));
+    $indexes = array_values(array_unique(array_merge($existing['indexes'] ?? [], $definition['indexes'] ?? [])));
+    if ($missing || count($indexes) !== count($existing['indexes'] ?? [])) {
+        $client->patch("/api/collections/$name", [
+            'fields' => array_merge($existing['fields'], $missing),
+            'indexes' => $indexes,
+        ]);
+    }
 }
 
-function getNowField()
+function serviceCredentialsFile()
 {
-    return [
-        [
-            'name' => 'now',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
+    return pocketbasePath() . '/service.json';
 }
 
-function getOnlineField()
+function readServiceCredentials()
 {
-    return [
-        [
-            'name' => 'online',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
+    $data = @json_decode((string) @file_get_contents(serviceCredentialsFile()), true);
+    return is_array($data) && !empty($data['email']) && !empty($data['password']) ? $data : null;
 }
 
-function getServerIdField()
+// Creates (or resets) the superuser the app uses to read/write its own collections.
+function ensureServiceAccount(PocketBaseClient $admin)
 {
-    return [
-        [
-            'name' => 'server_id',
-            'type' => 'relation',
-            'maxSelect' => 1,
-            'collectionId' => 'pbc_server',
-            'cascadeDelete' => true,
-            'required' => true,
-        ]
-    ];
+    $creds = readServiceCredentials();
+    if ($creds) {
+        $probe = new PocketBaseClient(Auth::pocketbaseUrl());
+        try {
+            $probe->authWithPassword($creds['email'], $creds['password']);
+            return;
+        } catch (Exception $e) {
+            // fall through and reset the password
+        }
+    }
+
+    $password = bin2hex(random_bytes(24));
+    $found = $admin->listRecords('_superusers', ['filter' => 'email="' . serviceEmail() . '"', 'perPage' => 1]);
+    if (!empty($found['items'][0]['id'])) {
+        $admin->patch('/api/collections/_superusers/records/' . $found['items'][0]['id'], [
+            'password' => $password, 'passwordConfirm' => $password,
+        ]);
+    } else {
+        $created = $admin->post('/api/collections/_superusers/records', [
+            'email' => serviceEmail(), 'password' => $password, 'passwordConfirm' => $password,
+        ]);
+        if (empty($created['id'])) {
+            throw new RuntimeException('Could not create the service account: ' . json_encode($created));
+        }
+    }
+
+    $file = serviceCredentialsFile();
+    $json = json_encode(['email' => serviceEmail(), 'password' => $password]);
+    $old = umask(0177);
+    $written = file_put_contents($file, $json);
+    umask($old);
+    if ($written === false) {
+        throw new RuntimeException("Could not write $file");
+    }
+    chmod($file, 0600);
 }
 
-function getNameField()
+// $admin must be authenticated as a superuser.
+function migrateSchema(PocketBaseClient $admin)
 {
-    return [
-        [
-            'name' => 'name',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
+    foreach (schemaDefinition() as $name => $definition) {
+        ensureCollection($admin, $name, $definition);
+    }
+    ensureServiceAccount($admin);
 }
-
-function getCountryCodeField()
-{
-    return [
-        [
-            'name' => 'country_code',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getLastActiveField()
-{
-    return [
-        [
-            'name' => 'last_active',
-            'type' => 'autodate',
-            'required' => true,
-            'onCreate' => true,
-            'onUpdate' => true,
-        ]
-    ];
-}
-
-function getGlobalInfoIdField()
-{
-    return [
-        [
-            'name' => 'global_info_id',
-            'type' => 'relation',
-            'maxSelect' => 1,
-            'collectionId' => 'pbc_global_info',
-            'cascadeDelete' => true,
-            'required' => true,
-        ]
-    ];
-}
-
-function getPlatformField()
-{
-    return [
-        [
-            'name' => 'platform',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getMemTotalField()
-{
-    return [
-        [
-            'name' => 'mem_total',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getDiskTotalField()
-{
-    return [
-        [
-            'name' => 'disk_total',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getSwapTotalField()
-{
-    return [
-        [
-            'name' => 'swap_total',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getArchField()
-{
-    return [
-        [
-            'name' => 'arch',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getBootTimeField()
-{
-    return [
-        [
-            'name' => 'boot_time',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getDescriptionField()
-{
-    return [
-        [
-            'name' => 'description',
-            'type' => 'text',
-            'required' => true,
-        ]
-    ];
-}
-
-function getHostIdField()
-{
-    return [
-        [
-            'name' => 'host_id',
-            'type' => 'relation',
-            'maxSelect' => 1,
-            'collectionId' => 'pbc_host',
-            'cascadeDelete' => true,
-            'required' => true,
-        ]
-    ];
-}
-
-function getCpuUsageField()
-{
-    return [
-        [
-            'name' => 'cpu_usage',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getMemUsedField()
-{
-    return [
-        [
-            'name' => 'mem_used',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getDiskUsedField()
-{
-    return [
-        [
-            'name' => 'disk_used',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getNetInTransferField()
-{
-    return [
-        [
-            'name' => 'net_in_transfer',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getNetOutTransferField()
-{
-    return [
-        [
-            'name' => 'net_out_transfer',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getNetInSpeedField()
-{
-    return [
-        [
-            'name' => 'net_in_speed',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getNetOutSpeedField()
-{
-    return [
-        [
-            'name' => 'net_out_speed',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getUptimeField()
-{
-    return [
-        [
-            'name' => 'uptime',
-            'type' => 'number',
-            'required' => true,
-        ]
-    ];
-}
-
-function getTimestampFields()
-{
-    return [
-        [
-            'name' => 'created',
-            'type' => 'autodate',
-            'required' => true,
-            'onCreate' => true,
-            'onUpdate' => false,
-        ],
-        [
-            'name' => 'updated',
-            'type' => 'autodate',
-            'required' => true,
-            'onCreate' => true,
-            'onUpdate' => true,
-        ]
-    ];
-}
-?>

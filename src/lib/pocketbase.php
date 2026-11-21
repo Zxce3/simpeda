@@ -4,6 +4,7 @@ class PocketBaseClient
 {
     private $baseUrl;
     private $token;
+    public $lastStatus = 0;
 
     public function __construct($baseUrl, $token = null)
     {
@@ -27,6 +28,8 @@ class PocketBaseClient
         $ch = curl_init($url);
 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 
         $headers = ['Content-Type: application/json'];
@@ -44,6 +47,7 @@ class PocketBaseClient
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $this->lastStatus = $httpCode;
 
         if (curl_errno($ch)) {
             throw new Exception('Request Error: ' . curl_error($ch));
@@ -81,7 +85,14 @@ class PocketBaseClient
 
     public function getRecords($collection)
     {
-        return $this->get("/api/collections/$collection/records");
+        return $this->listRecords($collection);
+    }
+
+    // $params: filter, sort, page, perPage, fields, skipTotal (see the PocketBase records API).
+    public function listRecords($collection, array $params = [])
+    {
+        $query = $params ? '?' . http_build_query($params) : '';
+        return $this->get("/api/collections/$collection/records$query");
     }
 
     public function createRecord($collection, $data)
@@ -91,7 +102,7 @@ class PocketBaseClient
 
     public function updateRecord($collection, $id, $data)
     {
-        return $this->put("/api/collections/$collection/records/$id", $data);
+        return $this->patch("/api/collections/$collection/records/$id", $data);
     }
 
     public function deleteRecord($collection, $id)
