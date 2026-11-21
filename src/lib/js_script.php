@@ -490,10 +490,13 @@ function serverForm(s = {}) {
 
 function showToken(name, token) {
     const origin = location.origin;
-    const run = 'curl -fsSL ' + origin + '/download/agent -o simpeda.php\nphp simpeda.php agent --url=' + origin + ' --token=' + token;
+    const one = 'curl -fsSL ' + origin + '/install/agent.sh | sudo bash -s -- --token ' + token;
+    const manual = 'curl -fsSL ' + origin + '/download/agent -o simpeda.php\nphp simpeda.php agent --url=' + origin + ' --token=' + token;
     const unit = '[Unit]\nDescription=SIMPEDA agent\nAfter=network-online.target\n\n[Service]\nExecStart=/usr/bin/php /opt/simpeda/simpeda.php agent --url=' + origin + ' --token=' + token + '\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target';
-    modal('Install the agent on ' + name, '<p>This token is shown <b>once</b>. Run this on the server you want to monitor (PHP 8.2+ with curl):</p><pre><code>' + esc(run) + '</code></pre>'
-        + '<p class="muted small">To keep it running, save this as <code>/etc/systemd/system/simpeda-agent.service</code> and run <code>systemctl enable --now simpeda-agent</code>:</p><pre><code>' + esc(unit) + '</code></pre>');
+    modal('Install the agent on ' + name, '<p>This token is shown <b>once</b>. On the server you want to monitor (Linux), run as root:</p><pre><code>' + esc(one) + '</code></pre>'
+        + '<p class="muted small">The script installs PHP if needed, downloads the agent (one small file, no database), tests the token and starts a systemd service. Read it first: <code>curl -fsSL ' + esc(origin) + '/install/agent.sh | less</code></p>'
+        + '<details><summary class="small">Manual install instead</summary><pre><code>' + esc(manual) + '</code></pre>'
+        + '<p class="muted small">Keep it running with this unit (<code>/etc/systemd/system/simpeda-agent.service</code>):</p><pre><code>' + esc(unit) + '</code></pre></details>');
 }
 
 function settingsPage() {

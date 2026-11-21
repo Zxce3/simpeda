@@ -1,7 +1,6 @@
 <?php
 class Auth
 {
-    const DEFAULT_POCKETBASE_URL = 'http://127.0.0.1:8090';
     const DEFAULT_VERIFY_INTERVAL = 300;
     const TOKEN_COOKIE = 'auth_token';
     const REFRESH_INTERVAL = 3600; 
@@ -9,7 +8,7 @@ class Auth
 
     public static function pocketbaseUrl()
     {
-        return getenv('SIMPEDA_POCKETBASE_URL') ?: self::DEFAULT_POCKETBASE_URL;
+        return getenv('SIMPEDA_POCKETBASE_URL') ?: 'http://127.0.0.1:' . pocketbasePort();
     }
 
     // Seconds a PocketBase-verified token is trusted before it is verified again.

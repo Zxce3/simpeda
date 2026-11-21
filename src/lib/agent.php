@@ -146,13 +146,14 @@ function postJson($url, array $data, array $headers = [], $timeout = 10)
 // php index.php agent --url=https://dash.example.com --token=TOKEN [--interval=5] [--once]
 function runAgent(array $args)
 {
-    $url = rtrim($args['url'] ?? '', '/');
-    $token = $args['token'] ?? getenv('SIMPEDA_AGENT_TOKEN') ?: '';
+    $url = rtrim($args['url'] ?? (getenv('SIMPEDA_URL') ?: ''), '/');
+    $token = $args['token'] ?? (getenv('SIMPEDA_AGENT_TOKEN') ?: '');
     if (!preg_match('#^https?://#', $url) || $token === '') {
-        fwrite(STDERR, "Usage: php index.php agent --url=https://dashboard.example.com --token=TOKEN [--interval=5] [--once]\n");
+        fwrite(STDERR, "Usage: php index.php agent --url=https://dashboard.example.com --token=TOKEN [--interval=5] [--once]\n"
+            . "(or set SIMPEDA_URL, SIMPEDA_AGENT_TOKEN and SIMPEDA_INTERVAL)\n");
         return 1;
     }
-    $interval = max((int) ($args['interval'] ?? 5), 1);
+    $interval = max((int) ($args['interval'] ?? (getenv('SIMPEDA_INTERVAL') ?: 5)), 1);
     $once = isset($args['once']);
     installSignalHandlers();
 
@@ -196,6 +197,12 @@ function installSignalHandlers()
             });
         }
     }
+}
+
+// The installer script is embedded here by build.php (src/agent-install.sh).
+function agentInstallScript()
+{
+    return '__AGENT_INSTALL_SH__';
 }
 
 // --- ingest -----------------------------------------------------------------------------

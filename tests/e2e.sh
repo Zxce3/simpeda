@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # End-to-end test with a REAL PocketBase: runs the app's CLI installer (php index.php install) (downloads the
 # pinned PocketBase release from GitHub), then checks the schema, login and API.
-# Needs network, php, curl, unzip; uses ports 8000 and 8090. Not run in CI.
+# Needs network, php, curl, unzip; uses ports 18000, 18090 and 18099 (override with SIMPEDA_TEST_APP_PORT / SIMPEDA_TEST_PB_PORT). Not run in CI.
 set -u
+# Ports are chosen to avoid clashing with a dashboard you run yourself (8000, 8080, 8090).
+APP_PORT=${SIMPEDA_TEST_APP_PORT:-18000}
+PB_PORT=${SIMPEDA_TEST_PB_PORT:-18090}
+export SIMPEDA_PB_PORT=$PB_PORT
+HOOK_PORT=${SIMPEDA_TEST_HOOK_PORT:-18099}
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
-app=http://127.0.0.1:8000
-pb=http://127.0.0.1:8090
+app=http://127.0.0.1:$APP_PORT
+pb=http://127.0.0.1:$PB_PORT
 email=admin@example.com
 password='p&ss<word>"\1234'
 fail=0
@@ -30,13 +35,13 @@ wait_for() { # wait_for SECONDS command...  -> succeeds as soon as the command d
 }
 json() { php -r '$j=json_decode(stream_get_contents(STDIN),true); echo eval("return $argv[1];");' "$1"; }
 
-for port in 8000 8090 8099; do
+for port in $APP_PORT $PB_PORT $HOOK_PORT; do
   if (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null; then echo "port $port is in use"; exit 1; fi
 done
 
 (cd "$root" && php build.php build >/dev/null) || { echo "build failed"; exit 1; }
 cp "$root/build/index.php" "$work/index.php"
-(cd "$work" && exec php -S 127.0.0.1:8000 index.php >"$work/app.log" 2>&1) & app_pid=$!
+(cd "$work" && exec php -S 127.0.0.1:$APP_PORT index.php >"$work/app.log" 2>&1) & app_pid=$!
 sleep 1
 
 check "fresh instance redirects to /install" 302 "$(code "$app/")"
@@ -79,7 +84,7 @@ check "forged cookie is rejected" 401 "$(code -H 'Cookie: auth_token=a.eyJleHAiO
 
 # PocketBase is stopped: the app must restart it on demand.
 for pid in $(pgrep -x pocketbase); do [ "$(readlink "/proc/$pid/cwd" 2>/dev/null)" = "$work" ] && kill "$pid"; done
-port_closed() { ! (exec 3<>/dev/tcp/127.0.0.1/8090) 2>/dev/null; }
+port_closed() { ! (exec 3<>/dev/tcp/127.0.0.1/$PB_PORT) 2>/dev/null; }
 wait_for 15 port_closed
 check "status endpoint restarts PocketBase" 202 "$(code "$app/?status")"
 sleep 6
@@ -122,7 +127,7 @@ check "pages are not framable" yes "$(printf '%s' "$hdr" | grep -qi '^X-Frame-Op
 # monitors + worker
 api -X POST -d '{"name":"bad","type":"http","target":"ftp://nope"}' "$app/api/monitors"; check "invalid monitor target is rejected" 400 "$code"
 api -X POST -d "{\"name\":\"app\",\"type\":\"http\",\"target\":\"$app/login\",\"interval\":10}" "$app/api/monitors"; check "http monitor is created" 201 "$code"
-api -X POST -d '{"name":"pocketbase","type":"tcp","target":"127.0.0.1:8090","interval":10}' "$app/api/monitors"; check "tcp monitor is created" 201 "$code"
+api -X POST -d '{"name":"pocketbase","type":"tcp","target":"127.0.0.1:'$PB_PORT'","interval":10}' "$app/api/monitors"; check "tcp monitor is created" 201 "$code"
 api -X POST -d '{"name":"closed port","type":"tcp","target":"127.0.0.1:9","interval":10}' "$app/api/monitors"
 (cd "$work" && exec php index.php worker >"$work/worker.log" 2>&1) & worker_pid=$!
 monitors_done() { api "$app/api/monitors"; [ "$(printf '%s' "$body" | json 'count(array_filter($j["monitors"], fn($m) => $m["last_run"] > 0))')" = 3 ]; }
@@ -135,9 +140,9 @@ check "uptime is computed" yes "$(printf '%s' "$body" | json '(function($j){fore
 cat > "$work/hook.php" <<'PHP'
 <?php file_put_contents(getenv('HOOK_LOG'), file_get_contents('php://input') . "\n", FILE_APPEND); echo 'ok';
 PHP
-(HOOK_LOG="$work/hooks.log" exec php -S 127.0.0.1:8099 "$work/hook.php" >/dev/null 2>&1) & hook_pid=$!
+(HOOK_LOG="$work/hooks.log" exec php -S 127.0.0.1:$HOOK_PORT "$work/hook.php" >/dev/null 2>&1) & hook_pid=$!
 sleep 1
-api -X PATCH -d '{"notify":{"type":"webhook","url":"http://127.0.0.1:8099/hook"},"alerts":{"offline_after":15}}' "$app/api/settings"
+api -X PATCH -d "{\"notify\":{\"type\":\"webhook\",\"url\":\"http://127.0.0.1:$HOOK_PORT/hook\"},\"alerts\":{\"offline_after\":15}}" "$app/api/settings"
 check "notification settings are saved" 200 "$code"
 check "webhook secret is masked in the API" '********' "$(printf '%s' "$body" | json '$j["notify"]["url"]')"
 api -X POST -d '{}' "$app/api/settings/test"; check "test notification is delivered" 200 "$code"
@@ -159,6 +164,24 @@ check "public status lists the public server" test-box "$(printf '%s' "$pub" | j
 check "public status leaks no host details or tokens" no "$(printf '%s' "$pub" | grep -qiE 'hostname|token|kernel|cpu_model|note' && echo yes || echo no)"
 check "status page renders without login" 200 "$(code "$app/status")"
 api -X PATCH -d '{"public_status":false}' "$app/api/settings"
+
+# agent installer script (bash)
+curl -s "$app/install/agent.sh" > "$work/install.sh"
+check "installer script bakes in the dashboard URL" yes "$(grep -q "^URL=\"$app\"" "$work/install.sh" && echo yes || echo no)"
+check "installer script is valid bash" 0 "$(bash -n "$work/install.sh" 2>/dev/null; echo $?)"
+check "installer without a token fails" 1 "$(bash "$work/install.sh" --no-service >/dev/null 2>&1; echo $?)"
+check "installer asks for root when a service is wanted" yes "$(bash "$work/install.sh" --token spk_x 2>&1 | grep -q 'run this as root' && echo yes || echo no)"
+api -X POST -d '{"name":"installer-box"}' "$app/api/servers"; inst_token=$(printf '%s' "$body" | json '$j["token"]'); inst_id=$(printf '%s' "$body" | json '$j["id"]')
+bash "$work/install.sh" --token spk_wrong --no-service --no-deps --dir "$work/agent-bad" >"$work/inst-bad.log" 2>&1; check "installer rejects a bad token" 1 "$?"
+check "installer explains the failure and leaves no env file" yes "$(grep -q 'test report failed' "$work/inst-bad.log" && [ ! -e "$work/agent-bad/agent.env" ] && echo yes || echo no)"
+bash "$work/install.sh" --token "$inst_token" --no-service --no-deps --dir "$work/agent-inst" >"$work/inst.log" 2>&1; check "installer installs and tests the agent" 0 "$?"
+check "installer wrote the agent and a private env file" yes "$([ -f "$work/agent-inst/simpeda.php" ] && [ "$(stat -c %a "$work/agent-inst/agent.env")" = 600 ] && echo yes || echo no)"
+check "agent install downloads no database (only the agent file)" yes "$([ ! -e "$work/agent-inst/pocketbase" ] && [ "$(ls -A "$work/agent-inst" | tr '\n' ' ')" = "agent.env simpeda.php " ] && echo yes || echo no)"
+check "installed agent reported to the dashboard" yes "$(api "$app/api/servers"; printf '%s' "$body" | json '(function($j){foreach($j["servers"] as $s){if($s["name"]==="installer-box")return $s["online"]?"yes":"no";}return "missing";})($j)')"
+bash "$work/install.sh" --update --no-service --dir "$work/agent-inst" >/dev/null 2>&1; check "installer --update works" 0 "$?"
+bash "$work/install.sh" --uninstall --no-service --dir "$work/agent-inst" >/dev/null 2>&1
+check "installer --uninstall removes everything" yes "$([ ! -e "$work/agent-inst" ] && echo yes || echo no)"
+api -X DELETE "$app/api/servers/$inst_id"
 
 # agent download, migrate, delete
 check "agent script is downloadable" yes "$(curl -s "$app/download/agent" | grep -q 'function runAgent' && echo yes || echo no)"

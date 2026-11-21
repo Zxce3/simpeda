@@ -86,14 +86,33 @@ Open `http://localhost:8000` and sign in with the account you just created.
 ## Add a server
 
 1. **Settings → Add server**, enter a name.
-2. Copy the commands shown (the token appears once). Run them on that server:
+2. Copy the command shown (the token appears once) and run it as root on that server:
+
+```bash
+curl -fsSL https://dash.example.com/install/agent.sh | sudo bash -s -- --token spk_...
+```
+
+The script installs PHP if it is missing, downloads the agent, tests the token with one report, and starts a systemd service. The agent is one small file. It does **not** download or run a database: all data is stored in the dashboard's PocketBase.
+
+Read the script first with `curl -fsSL https://dash.example.com/install/agent.sh | less`.
+
+| Option | Meaning |
+| --- | --- |
+| `--token TOKEN` | Server token (or set `SIMPEDA_AGENT_TOKEN`) |
+| `--url URL` | Dashboard address (default: the one you downloaded the script from) |
+| `--interval N` | Seconds between reports (default 5) |
+| `--no-service` | Install and test only, no systemd service |
+| `--update` | Download the latest agent and restart the service |
+| `--uninstall` | Remove the service and files |
+
+No systemd or no root? Run the agent by hand instead:
 
 ```bash
 curl -fsSL https://dash.example.com/download/agent -o simpeda.php
-php simpeda.php agent --url=https://dash.example.com --token=spk_...
+php simpeda.php agent --url=https://dash.example.com --token=spk_...   # add --once to test
 ```
 
-Add `--once` to test a single report. The dialog also gives a systemd unit to keep the agent running. To watch the dashboard host itself, add it like any other server.
+To watch the dashboard host itself, add it like any other server.
 
 ## Usage
 
@@ -136,9 +155,12 @@ Set as environment variables.
 | --- | --- | --- |
 | `SIMPEDA_PB_DIR` | `pocketbase` | Folder with PocketBase, its data and service credentials |
 | `SIMPEDA_RETENTION_DAYS` | `7` | Days of history kept (1 to 90) |
-| `SIMPEDA_POCKETBASE_URL` | `http://127.0.0.1:8090` | PocketBase address |
+| `SIMPEDA_PB_PORT` | `8090` | Port PocketBase listens on (127.0.0.1). Change it if 8090 is taken |
+| `SIMPEDA_POCKETBASE_URL` | `http://127.0.0.1:<port>` | PocketBase address, if it runs elsewhere |
 | `SIMPEDA_VERIFY_INTERVAL` | `300` | Seconds a login is trusted before PocketBase re-checks it |
 | `SIMPEDA_AGENT_TOKEN` | – | Agent token, instead of `--token` |
+| `SIMPEDA_URL` | – | Dashboard address for the agent, instead of `--url` |
+| `SIMPEDA_INTERVAL` | `5` | Agent report interval, instead of `--interval` |
 | `SIMPEDA_VERSION` | `git describe` | Version shown in the UI (build time) |
 
 ## Production notes
@@ -175,7 +197,7 @@ Admin login is checked against PocketBase. Forms and API writes need a CSRF toke
 ```bash
 composer install     # PHPStan only
 composer check       # lint, PHPStan, build, smoke tests
-composer test:e2e    # real PocketBase, needs network, ports 8000/8090/8099, ~2 min
+composer test:e2e    # real PocketBase, needs network, ports 18000/18090/18099, ~2 min
 php build.php serve 8000   # build, watch, serve
 ```
 
