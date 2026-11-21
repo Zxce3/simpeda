@@ -26,6 +26,7 @@ function handleRequest()
     $path = $parsedUri['path'] ?? '/';
     $query = $parsedUri['query'] ?? '';
 
+    sendSecurityHeaders();
     try {
         if (strncmp($path, '/api/', 5) === 0) {
             if (!isPocketbaseInstalled()) {
@@ -110,7 +111,8 @@ function handleGetRequests($path, $query)
         exit;
     }
 
-    if (!empty($query)) {
+    // Legacy ?status / ?dashboard / ?login on the root path; other queries (e.g. /server?id=) route normally.
+    if ($path === '/' && in_array($query, ['status', 'dashboard', 'login'], true)) {
         switch ($query) {
             case 'status':
                 handlePocketbaseStatus();
@@ -128,9 +130,6 @@ function handleGetRequests($path, $query)
                     return;
                 }
                 web_router('login');
-                return;
-            default:
-                displayErrorPage();
                 return;
         }
     }
@@ -327,6 +326,7 @@ function installPocketbase($email, $password)
         escapeshellarg(pocketbaseDataPath()),
         escapeshellarg(POCKETBASE_LOG)
     );
+    hideDisplayFromChildren();
     exec($command);
     sleep(5);
 
@@ -354,6 +354,13 @@ function installPocketbase($email, $password)
     return true;
 }
 
+// PocketBase tries to open its installer link in the desktop browser when a display is available.
+function hideDisplayFromChildren()
+{
+    putenv('DISPLAY');
+    putenv('WAYLAND_DISPLAY');
+}
+
 function startPocketbase($port)
 {
     $command = sprintf(
@@ -363,6 +370,7 @@ function startPocketbase($port)
         escapeshellarg(pocketbaseDataPath()),
         escapeshellarg(POCKETBASE_LOG)
     );
+    hideDisplayFromChildren();
     exec($command);
     sleep(5);
 
