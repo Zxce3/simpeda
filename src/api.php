@@ -1,6 +1,6 @@
 <?php
 
-const POCKETBASE_VERSION = '0.24.2';
+const POCKETBASE_VERSION = '0.40.6';
 const POCKETBASE_PATH = 'pocketbase';
 const POCKETBASE_DATA_PATH = 'pocketbase/pb_data';
 const POCKETBASE_LOG = 'pocketbase.log';
