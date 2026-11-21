@@ -19,7 +19,7 @@ This project provides a simplified system information display for a server dashb
 
 ## Prerequisites
 
-- PHP 8 or higher installed on your system
+- PHP 8.2 or higher with the curl extension (CI tests 8.2 to 8.5)
 - Git installed on your system
 - Currently supports Linux or Debian-based systems
 
@@ -27,7 +27,7 @@ This project provides a simplified system information display for a server dashb
 
 ### API Endpoint
 
-The `api.php` file provides an API endpoint for AJAX updates. To fetch the system information in JSON format, send a GET request to `api.php?api=1`.
+`GET /?api=1` returns the system information as JSON. It requires a logged-in session and answers `401` otherwise.
 
 ### Dashboard
 
@@ -40,46 +40,41 @@ You can toggle between light and dark themes using the "Toggle Theme" button. Th
 ## Development
 
 ```bash
-php build.php build      # minify src/ into build/index.php
-php build.php serve 8000 # build, watch, and serve on http://localhost:8000
-git ls-files '*.php' | xargs -n1 php -l   # syntax check (what CI runs)
+composer install            # only needed for PHPStan (dev dependency)
+composer check              # lint, PHPStan, build, smoke tests
+composer lint | analyse | build | test   # or run each step alone
+php build.php serve 8000    # build, watch, and serve on http://localhost:8000
 ```
 
-No dependencies to install: the project only needs PHP (CI tests 8.2 to 8.5).
-The app has no environment variables; the PocketBase URL is a constant in `src/lib/auth.php`.
+Without Composer you can still build with `php build.php build`.
+
+`tests/smoke.sh` builds the app and runs it against a stub PocketBase (`tests/stub_pocketbase.php`, port 8090), so no real PocketBase is needed. It checks that the API is closed to anonymous and forged-cookie requests, that reinstalling is refused and that login works.
+
+### Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SIMPEDA_POCKETBASE_URL` | `http://127.0.0.1:8090` | PocketBase URL used for authentication |
+| `SIMPEDA_VERSION` | `git describe` | Version stamped into `build/index.php` |
 
 ## CI and releases
 
-- `.github/workflows/ci.yml` lints on PHP 8.2 to 8.5, builds, and smoke-tests on every push to `master` and every PR.
-- Pushing a `v*` tag builds `build/index.php` and creates a draft GitHub release.
-- Actions are pinned by commit SHA and kept current by Dependabot (`.github/dependabot.yml`).
+- `.github/workflows/ci.yml` lints on PHP 8.2 to 8.5, runs PHPStan, builds and smoke-tests on every push to `master` and every PR.
+- Pushing a `v*` tag runs the same checks, builds `build/index.php` and creates a draft GitHub release with a SHA-256 checksum and a build provenance attestation (`gh attestation verify index.php --repo Zxce3/simpeda`).
+- Actions and Composer dependencies are kept current by Dependabot; actions are pinned by commit SHA.
 
 ## File Structure
 
-- `index.php`: Main file containing the PHP code to retrieve system information and the HTML/CSS/JavaScript for the dashboard.
-- `README.md`: Documentation file.
-- `build/`: Directory containing build-related files.
-  - `index.php`: Build version of the main file.
-  - `pocketbase/`: Directory containing PocketBase files.
-    - `pb_data/`: Directory containing PocketBase data files.
-    - `pocketbase`: PocketBase executable.
-    - `CHANGELOG.md`: PocketBase changelog.
-    - `LICENSE.md`: PocketBase license.
-  - `pocketbase.log`: Log file for PocketBase.
-- `build.md`: Build documentation.
-- `build.php`: Build script.
-- `src/`: Directory containing source files.
-  - `api.php`: PHP file for API endpoints.
-  - `auth.php`: PHP file for authentication handling.
-  - `css_style.php`: PHP file containing CSS styles.
-  - `dashboard.php`: PHP file for displaying the dashboard.
-  - `error_page.php`: PHP file for displaying error pages.
-  - `home.php`: PHP file for displaying the home page.
-  - `install.php`: PHP file for installation.
-  - `js_script.php`: PHP file containing JavaScript code.
-  - `lib/`: Directory containing library files.
-    - `pocketbase.php`: PHP file for interacting with PocketBase.
-  - `SystemInformation.php`: PHP file with functions to retrieve system information.
+- `src/`: source files, concatenated and minified into one file by the build.
+  - `api.php`: request handling, PocketBase install/start.
+  - `error_page.php`: error pages.
+  - `components/`: page layout (`header.php`, `body.php`).
+  - `pages/`: pages (`home`, `login`, `dashboard`, `install`, `404`).
+  - `lib/`: `auth.php`, `pocketbase.php` (API client), `schema.php`, `SystemInformation.php`, `helper.php`, `css_style.php`, `js_script.php`.
+- `build.php`: build script (`build`, `watch`, `serve`).
+- `build/index.php`: build output (git-ignored).
+- `tests/`: smoke test and stub PocketBase.
+- `composer.json`, `phpstan.neon`: scripts and static analysis.
 
 ## License
 
